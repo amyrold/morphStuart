@@ -233,9 +233,273 @@ ggplot(morph_long, aes(x = measure, fill = part_type)) +
 
 ```
 
+#==============================================================================#
+# DATA PREPROCESSING
+## Handle Dorsal Spine and Pelvic Girdle Logic
+```{r Spine and Girdle Logic}
+# Apply logic for dorsal spines and pelvic girdle:
+# - If *NA = 1, corresponding measurements should be NA (poor preservation)
+# - If *NA = 0 and respective count = 0, length measurements should be 0 (biologically absent)
+
+morph <- morph %>%
+  mutate(
+    # DS1 logic
+    DS1 = case_when(
+      MDS1NA == 1 ~ NA_real_,  # Poor preservation
+      MDS1 == 0 & MDS1NA == 0 ~ 0, # Biologically absent
+      TRUE ~ DS1  # Keep original value
+    ),
+    # DS2 logic
+    DS2 = case_when(
+      MDS2NA == 1 ~ NA_real_,  # Poor preservation
+      MDS2 == 0 & MDS2NA == 0 ~ 0, # Biologically absent
+      TRUE ~ DS2  # Keep original value
+    ),
+    # DS3 logic
+    DS3 = case_when(
+      MDS3NA == 1 ~ NA_real_,  # Poor preservation
+      MDS3 == 0 & MDS3NA == 0 ~ 0, # Biologically absent
+      TRUE ~ DS3  # Keep original value
+    ),
+    # Pelvic spine logic
+    `PSP.L` = case_when(
+      MPSPNA == 1 ~ NA_real_,  # Poor preservation
+      MPSP == 0 & MPSPNA == 0 ~ 0, # Biologically absent
+      TRUE ~ `PSP.L`  # Keep original value
+    ),
+    `PSP.R` = case_when(
+      MPSPNA == 1 ~ NA_real_,  # Poor preservation
+      MPSP == 0 & MPSPNA == 0 ~ 0, # Biologically absent
+      TRUE ~ `PSP.R`  # Keep original value
+    ),
+    # Pelvic girdle length
+    TPG = case_when(
+      MPSPNA == 1 ~ NA_real_,  # Poor preservation if girdle uncertain
+      TRUE ~ TPG  # Keep original value
+      # Note: TPG can have a value even if MPSP=0, as fish can have a girdle without spines
+    )
+  )
+```
 
 
+#==============================================================================#
+# DATA CLEANING
+## Merge Redundant Part Types
+```{r}
+# Create lists of different column types
+# Presence/absence columns - take maximum (if any row has 1, the feature is present)
+presence_cols <- c("MDS1", "MDS2", "MDS3", "MPSP")
 
+# Preservation uncertainty columns - take maximum (if any row has 1, preservation is uncertain)
+preservation_cols <- c("MDS1NA", "MDS2NA", "MDS3NA", "MPSPNA")
 
+# Count columns - take maximum value across rows (not sum, as these are counts per fish)
+count_cols <- c("MDF", "MAF", "MCV", "MAV", "MPT")
 
+# Measurement columns - take first non-NA value
+measurement_cols <- c("SL", "CAV", "DS1", "DS2", "DS3", "LPT", "PSP.L", "PSP.R", 
+                     "TPG", "ECT", "CLE", "PMX", "Scale_10mm")
+
+# Create custom functions for each column type
+max_function <- function(x) {
+  if(all(is.na(x))) {
+    return(NA)
+  } else {
+    return(max(x, na.rm = TRUE))
+  }
+}
+
+first_non_na <- function(x) {
+  if(all(is.na(x))) {
+    return(NA)
+  } else {
+    return(x[min(which(!is.na(x)))])
+  }
+}
+
+# Merge multiple rows for the same fish_id and part_type
+merged_parts <- morph %>%
+  group_by(fish_id, part_type) %>%
+  summarise(
+    # Take maximum for presence/absence columns
+    across(all_of(presence_cols), max_function),
+    # Take maximum for preservation uncertainty columns
+    across(all_of(preservation_cols), max_function),
+    # Take maximum for count columns (these are typically not distributed across rows)
+    across(all_of(count_cols), max_function),
+    # Take first non-NA for measurement columns
+    across(all_of(measurement_cols), first_non_na),
+    # Track how many rows were merged
+    row_count = n(),
+    .groups = "drop"
+  )
+
+# Check for implausible values in merged data
+count_summary <- merged_parts %>%
+  select(fish_id, part_type, all_of(count_cols)) %>%
+  pivot_longer(cols = all_of(count_cols), 
+               names_to = "measure", 
+               values_to = "value") %>%
+  group_by(measure) %>%
+  summarise(
+    min = min(value, na.rm = TRUE),
+    max = max(value, na.rm = TRUE),
+    mean = mean(value, na.rm = TRUE),
+    median = median(value, na.rm = TRUE)
+  )
+
+print(count_summary)
+
+# Check how many fish had multiple rows merged
+merge_summary <- merged_parts %>%
+  group_by(fish_id, part_type) %>%
+  summarise(row_count = first(row_count), .groups = "drop") %>%
+  filter(row_count > 1)
+
+print(paste("Number of fish with multiple rows merged:", n_distinct(merge_summary$fish_id)))
+```
+
+## Flag Conflicting Measurements
+```{r Flag Duplicates}
+# List of actual measurement columns we want to check for conflicts
+# These are columns with actual length measurements, not counts or presence indicators
+measurement_cols_to_check <- c(
+  "SL",    # Standard Length
+  "CAV",   # Caudal Abdominal Vertebrae Length
+  "DS1",   # Dorsal spine 1 length
+  "DS2",   # Dorsal spine 2 length
+  "DS3",   # Dorsal spine 3 length
+  "LPT",   # Length of penultimate pre-dorsal pterygiophores
+  "PSP.L", # Length of left pelvic spine
+  "PSP.R", # Length of right pelvic spine
+  "TPG",   # Pelvic girdle length
+  "ECT",   # Ectocoracoid length
+  "CLE",   # Cleithrum length
+  "PMX"    # Premaxilla length
+)
+
+# Convert merged data to wide format with P and C columns
+wide_merged <- merged_parts %>%
+  pivot_wider(
+    id_cols = fish_id,
+    names_from = part_type,
+    values_from = all_of(colnames(merged_parts)[!colnames(merged_parts) %in% c("fish_id", "part_type")]),
+    names_glue = "{part_type}_{.value}"
+  )
+
+# Create a function to find duplicates (non-NA values in both P and C)
+find_duplicates <- function(p_value, c_value) {
+  if(!is.na(p_value) && !is.na(c_value)) {
+    return(TRUE)
+  } else {
+    return(FALSE)
+  }
+}
+
+# Create flags for duplicate measurements
+flagged_data <- wide_merged
+
+# Initialize empty list to store flags
+flag_columns <- list()
+
+# Check each measurement for duplicates
+for(col in measurement_cols_to_check) {
+  p_col <- paste0("P_", col)
+  c_col <- paste0("C_", col)
+  
+  # Skip if columns don't exist (some might be missing from one part type)
+  if(!(p_col %in% names(flagged_data) && c_col %in% names(flagged_data))) {
+    next
+  }
+  
+  # Create flag column
+  flag_col <- paste0("flag_", col)
+  flagged_data[[flag_col]] <- mapply(
+    find_duplicates,
+    flagged_data[[p_col]],
+    flagged_data[[c_col]]
+  )
+  
+  # Add to list of flag columns
+  flag_columns <- c(flag_columns, flag_col)
+}
+
+# Count number of flags per fish
+flagged_data <- flagged_data %>%
+  mutate(total_flags = rowSums(across(all_of(unlist(flag_columns))), na.rm = TRUE))
+
+# Create a column with all the flagged measurement names
+flagged_data <- flagged_data %>%
+  mutate(
+    flagged_measurements = apply(
+      flagged_data[, unlist(flag_columns), drop = FALSE], 
+      1, 
+      function(x) {
+        paste(
+          names(x)[x], 
+          collapse = ", "
+        ) %>% 
+          str_remove_all("flag_")
+      }
+    )
+  )
+
+# Examine flags
+flag_summary <- flagged_data %>%
+  summarise(
+    fish_with_flags = sum(total_flags > 0),
+    total_flags = sum(total_flags),
+    max_flags_per_fish = max(total_flags)
+  )
+
+print(flag_summary)
+
+# Get counts by measurement type
+flag_counts <- data.frame(
+  measurement = unlist(flag_columns) %>% str_remove("flag_"),
+  count = colSums(flagged_data[, unlist(flag_columns)], na.rm = TRUE)
+)
+
+print(flag_counts)
+
+# Export for manual review
+# Create a more manageable version with essential information
+review_data <- flagged_data %>%
+  select(
+    fish_id, 
+    total_flags, 
+    flagged_measurements,
+    matches("^[PC]_(SL|CAV|DS1|DS2|DS3|LPT|PSP\\.L|PSP\\.R|TPG|ECT|CLE|PMX)$")
+  ) %>%
+  filter(total_flags > 0) %>%
+  arrange(desc(total_flags))
+
+# Export the full dataset for complete context
+write.csv(flagged_data, paste0(p$`1.data/c.flagged`, "all_flagged_measurements.csv"), row.names = FALSE)
+
+# Export the more focused review dataset
+write.csv(review_data, paste0(p$`1.data/c.flagged`, "review_flagged_measurements.csv"), row.names = FALSE)
+
+```
+## Visualize
+```{r}
+# Create a visualization of the flagged measurements
+ggplot(flag_counts, aes(x = reorder(measurement, count), y = count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Number of fish with duplicate measurements by type",
+       x = "Measurement",
+       y = "Count of fish with duplicates")
+
+# Visualize distribution of flags per fish
+ggplot(flagged_data %>% filter(total_flags > 0), 
+       aes(x = total_flags)) +
+  geom_histogram(binwidth = 1, fill = "coral") +
+  theme_minimal() +
+  labs(title = "Distribution of duplicate measurements per fish",
+       x = "Number of duplicate measurements",
+       y = "Count of fish")
+
+```
 
