@@ -16,10 +16,21 @@ knitr::opts_chunk$set(echo = FALSE)
 ## Loading Libraries
 ```{r Libraries, include=FALSE}
 # load libraries needed for our analyses
-# 1 MASS
-if (!require("MASS")) install.packages("MASS")
-library('MASS')
+# 1 ggplot2
+if (!require("ggplot2")) install.packages("ggplot2")
+library(ggplot2)
 
+# 2 dplyr
+if (!require("dplyr")) install.packages("dplyr")
+library(dplyr)
+
+# 3 tidyr
+if (!require("tidyr")) install.packages("tidyr")
+library(tidyr)
+
+# 4 stringr
+if (!require("stringr")) install.packages("stringr")
+library(stringr)
 
 ```
 
@@ -30,7 +41,6 @@ wk.dir <- getwd()
 # Set seed for reproducibility
 set.seed(333)
 
-
 ```
 
 ## Folder Management
@@ -38,18 +48,18 @@ set.seed(333)
 
 # This is a function to initialize a new project
   # It creates required subfolders (see defaults) 
-  # It outputs an object that stores the relative paths to these subfolders
+  # It outputs an object that stores the relative paths to these sub-folders
 
 # If calling the function within the working directory of the project, project_number = 0
-  # this will create necessary subfolders in current working directory
+  # this will create necessary sub-folders in current working directory
 
 # If creating a new root folder for the project, provide project_number >=1 and a project_name
-  # this will create a folder "pX.project_name/" to store all subfolders
+  # this will create a folder "pX.project_name/" to store all sub-folders
 new_project <- function(project_number, project_name = NULL, subfolders = NULL, wk.dir = getwd()) {
   # Set default subfolders
   default_subfolders <- c("data", "scripts", "output", "docs")
   
-  # Use provided subfolders or defaults if none are provided
+  # Use provided sub-folders or defaults if none are provided
   if (is.null(subfolders)) {
     subfolders <- default_subfolders
   }
@@ -90,7 +100,7 @@ new_project <- function(project_number, project_name = NULL, subfolders = NULL, 
     project_paths$main <- project_path
   }
   
-  # Create subfolders
+  # Create sub-folders
   for (sub in subfolders) {
     # Determine subfolder name based on project type
     if (is_root_project) {
@@ -102,7 +112,7 @@ new_project <- function(project_number, project_name = NULL, subfolders = NULL, 
     # Full path for the subfolder
     subfolder_path <- file.path(base_path, subfolder_name)
     
-    # Create subfolder if it doesn't exist
+    # Create sub-folder if it doesn't exist
     if (!file.exists(subfolder_path)) {
       dir.create(subfolder_path, recursive = TRUE)  # Added recursive=TRUE for nested paths
       message("Created subfolder: ", subfolder_path)
@@ -110,7 +120,7 @@ new_project <- function(project_number, project_name = NULL, subfolders = NULL, 
       message("Subfolder already exists: ", subfolder_path)
     }
     
-    # Add the subfolder path to the list
+    # Add the sub-folder path to the list
     project_paths[[sub]] <- paste0(subfolder_path, "/")
   }
   
@@ -120,4 +130,112 @@ new_project <- function(project_number, project_name = NULL, subfolders = NULL, 
 
 ```
 
+## Initialize Directories
+```{r}
+# Initialize new project directories
+p <- new_project(0, subfolders = c("1.data", "1.data/a.raw", "1.data/b.merged",
+                                   "1.data/c.flagged","1.data/d.processed", 
+                                   "2.scripts", "3.outputs", "4.docs"))
+```
+
 #==============================================================================#
+# DATA IMPORT
+```{r}
+# Read in data and check initial structure
+morph <- read.csv(paste0(p$`1.data/a.raw`, "241015_PitLMorph.csv"))
+str(morph)
+```
+
+## ID Structure Analysis
+```{r}
+# Extract fish ID and part type
+morph <- morph %>%
+  mutate(
+    fish_id = str_remove(ID, "_[PC]\\.jpg$"),
+    part_type = str_extract(ID, "[PC](?=\\.jpg$)")
+  )
+
+# Count rows per fish and part type
+fish_part_counts <- morph %>%
+  group_by(fish_id, part_type) %>%
+  summarise(row_count = n(), .groups = "drop") %>%
+  pivot_wider(names_from = part_type, values_from = row_count, values_fill = 0)
+
+# Check fish without both part types
+missing_parts <- fish_part_counts %>%
+  filter(P == 0 | C == 0)
+sum(missing_parts$`NA`) # 14 fish without both "part" & "counter part"
+
+# Fish with excessive rows
+multi_row_fish <- fish_part_counts %>%
+  filter(P > 1 | C > 1)
+length(multi_row_fish$fish_id) # 361 fish with duplicate "parts" or "counter parts"
+```
+
+## Basic Quality Check
+```{r}
+# Check for implausible values in measurement columns
+# Example for length measurements (adjust for your specific columns)
+length_cols <- c("SL", "CAV", "DS1", "DS2", "DS3", "LPT", "PSP.L", "PSP.R", "TPG", "ECT", "CLE", "PMX")
+
+# Check for negative values in length columns
+negative_lengths <- morph %>%
+  select(ID, all_of(length_cols)) %>%
+  pivot_longer(cols = -ID, names_to = "measure", values_to = "value") %>%
+  filter(value < 0)
+length(negative_lengths$ID) # No negative measurements
+```
+
+#==============================================================================#
+# SUMMARY STATS - PRE MERGE
+## Measurement Availability
+```{r}
+# Calculate percentage of non-NA values by part type
+measurement_availability <- morph %>%
+  group_by(part_type) %>%
+  summarise(across(-c(n, ID, fish_id), 
+                   ~mean(!is.na(.x)) * 100,
+                   .names = "pct_{.col}"))
+
+```
+
+## Overlap Assesment
+```{r}
+# For each fish, which measurements appear in both P and C?
+# This will help understand potential duplication issues
+
+# Convert data to long format
+morph_long <- morph %>%
+  pivot_longer(cols = -c(n, ID, fish_id, part_type), 
+               names_to = "measure", 
+               values_to = "value") %>%
+  filter(!is.na(value))
+
+# Find measurements that appear in both P and C for the same fish
+duplicate_measures <- morph_long %>%
+  group_by(fish_id, measure) %>%
+  summarise(
+    part_count = n_distinct(part_type),
+    .groups = "drop"
+  ) %>%
+  filter(part_count > 1)
+
+```
+## Vizualization
+```{r}
+# Create a visualization of data completeness
+ggplot(morph_long, aes(x = measure, fill = part_type)) +
+  geom_bar(position = "dodge") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Measurement counts by part type",
+       x = "Measurement",
+       y = "Count")
+
+```
+
+
+
+
+
+
+
