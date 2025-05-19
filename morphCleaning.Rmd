@@ -340,17 +340,20 @@ identify_overlaps <- function(data, threshold = 0.05) {
 merge_non_overlap <- function(data) {
   # requires dplyr and tidyr
   
+  # Get variable mappings for specialized handling
+  var_map <- variable_mapping()
+  
   # Get unique fish IDs
   fish_ids <- unique(data$fish_id)
   
-  # Define measurement columns
+  # Define metadata columns (non-measurement columns)
   id_cols <- c("n", "ID", "fish_id", "part_type", "bin")
   measure_cols <- setdiff(names(data), id_cols)
   
   # Initialize empty dataframe for results
   result_list <- list()
   
-  # Process each fish - some looping is still needed for the logical merging
+  # Process each fish
   for (i in seq_along(fish_ids)) {
     id <- fish_ids[i]
     
@@ -358,50 +361,87 @@ merge_non_overlap <- function(data) {
     fish_data <- data %>% 
       filter(fish_id == id)
     
-    # If only one row, just use it directly
-    if (nrow(fish_data) == 1) {
-      result_list[[i]] <- fish_data
+    # Get part and counterpart data
+    part_data <- fish_data %>% filter(part_type == "P")
+    cpart_data <- fish_data %>% filter(part_type == "C")
+    
+    # Create a results row
+    result_row <- data.frame(fish_id = id)
+    
+    # If only one part type exists, use that directly
+    if (nrow(part_data) == 0 || nrow(cpart_data) == 0) {
+      result_row <- if(nrow(part_data) > 0) part_data[1,] else cpart_data[1,]
+      result_row$part_type <- "merged"
+      result_row$merged <- TRUE
+      result_list[[i]] <- result_row
       next
     }
     
-    # Step 1: Convert to long format (each measurement becomes a row)
-    fish_long <- fish_data %>%
-      pivot_longer(
-        cols = all_of(measure_cols),
-        names_to = "variable",
-        values_to = "value"
-      ) %>%
-      filter(!is.na(value))  # Remove NA values
+    # Handle metadata - use first part row for metadata
+    template_row <- part_data[1,]
+    for (col in id_cols) {
+      if (col != "part_type") {
+        result_row[[col]] <- template_row[[col]]
+      } else {
+        result_row[[col]] <- "merged"
+      }
+    }
+    result_row$merged <- TRUE
     
-    # Step 2: Prioritize part rows (P) over counterpart rows (C)
-    merged_values <- fish_long %>%
-      group_by(variable) %>%
-      arrange(variable, ifelse(part_type == "P", 1, 2)) %>%  # Sort P before C
-      slice(1) %>%  # Take first row in each group (prioritizes P)
-      ungroup()
-    
-    # Step 3: Convert back to wide format
-    merged_row <- merged_values %>%
-      select(variable, value) %>%
-      pivot_wider(
-        names_from = "variable",
-        values_from = "value"
-      ) 
-    
-    # Step 4: Add back fish_id and set part_type to "merged"
-    merged_row <- merged_row %>%
-      mutate(
-        fish_id = id,
-        part_type = "merged",
-        merged = TRUE
-      )
+    # For each measurement column, merge values prioritizing part over counterpart
+    for (col in measure_cols) {
+      # Determine variable type
+      var_type <- "continuous"  # default
+      if (col %in% var_map$binary) var_type <- "binary"
+      if (col %in% var_map$count) var_type <- "count"
+      
+      # Get values from part and counterpart
+      part_vals <- part_data[[col]]
+      part_vals <- part_vals[!is.na(part_vals)]
+      
+      cpart_vals <- cpart_data[[col]]
+      cpart_vals <- cpart_vals[!is.na(cpart_vals)]
+      
+      # Aggregate values based on type
+      part_val <- NA
+      cpart_val <- NA
+      
+      if (length(part_vals) > 0) {
+        part_val <- if (var_type %in% c("binary", "count")) max(part_vals) else mean(part_vals)
+      }
+      
+      if (length(cpart_vals) > 0) {
+        cpart_val <- if (var_type %in% c("binary", "count")) max(cpart_vals) else mean(cpart_vals)
+      }
+      
+      # Priority: part > counterpart
+      if (!is.na(part_val)) {
+        result_row[[col]] <- part_val
+      } else if (!is.na(cpart_val)) {
+        result_row[[col]] <- cpart_val
+      } else {
+        result_row[[col]] <- NA
+      }
+    }
     
     # Add to result list
-    result_list[[i]] <- merged_row
+    result_list[[i]] <- result_row
   }
   
   # Combine all results
   result <- bind_rows(result_list)
+  
+  # Ensure all original columns exist in output
+  for (col in names(data)) {
+    if (!(col %in% names(result))) {
+      result[[col]] <- NA
+    }
+  }
+  
+  # Add merged flag if not already present
+  if (!("merged" %in% names(result))) {
+    result$merged <- TRUE
+  }
   
   return(as.data.frame(result))
 }
@@ -691,6 +731,10 @@ write.csv(missing_scales_detail,
 ## Merge Non-Overlapping Fish
 ```{r}
 merged_non_overlap <- merge_non_overlap(overlap_results$non_overlap_fish)
+
+# Write merged data for Non-Overlapping Fish
+write.csv(merged_non_overlap, 
+          file = paste0(p$`1.data/b.merged`, "/merged_non_overlap.csv"))
 ```
 
 ## Flag Conflicting Measurements
