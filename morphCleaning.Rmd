@@ -140,6 +140,28 @@ p <- new_project(0, subfolders = c("1.data", "1.data/a.raw", "1.data/b.merged",
 
 #==============================================================================#
 # FUNCTIONS
+## variable_mapping
+```{r}
+variable_mapping <- function() {
+  # Define measurement types
+  continuous_vars <- c("SL", "CAV", "DS1", "DS2", "DS3", "LPT", 
+                      "PSP.L", "PSP.R", "TPG", "ECT", "CLE", "PMX")
+  
+  count_vars <- c("MDF", "MAF", "MCV", "MAV", "MPT", "MPSP")
+  
+  binary_vars <- c("MDS1", "MDS2", "MDS3", "MDS1NA", 
+                   "MDS2NA", "MDS3NA", "MPSPNA")
+  
+  # Return as a list
+  return(list(
+    continuous = continuous_vars,
+    count = count_vars,
+    binary = binary_vars,
+    all = c(continuous_vars, count_vars, binary_vars)
+  ))
+}
+```
+
 ## handle_special_cases
 ```{r}
 handle_special_cases <- function(data) {
@@ -207,23 +229,22 @@ handle_special_cases <- function(data) {
 identify_overlaps <- function(data, threshold = 0.05) {
   # Requires tidyr and dplyr
   
-  # Define measurement columns
-  measure_cols <- c("SL", "CAV", "DS1", "DS2", "DS3", "MDF", "MAF", "MCV", "MAV", 
-                    "MPT", "LPT", "PSP.L", "PSP.R", "TPG", "ECT", "CLE", "PMX")
+  # Get variable mappings
+  var_map <- variable_mapping()
   
   # Step 1: Create separate dataframes for part and counterpart data
   part_data <- data %>% 
     filter(part_type == "P") %>%
-    select(fish_id, part_type, row_id = n, Scale_10mm, all_of(measure_cols))
+    select(fish_id, part_type, row_id = n, Scale_10mm, all_of(var_map$all))
   
   cpart_data <- data %>% 
     filter(part_type == "C") %>%
-    select(fish_id, part_type, row_id = n, Scale_10mm, all_of(measure_cols))
+    select(fish_id, part_type, row_id = n, Scale_10mm, all_of(var_map$all))
   
   # Step 2: Gather measurements into long format for easier comparison
   part_long <- part_data %>%
     pivot_longer(
-      cols = all_of(measure_cols),
+      cols = all_of(var_map$all),
       names_to = "measure",
       values_to = "part_value"
     ) %>%
@@ -232,7 +253,7 @@ identify_overlaps <- function(data, threshold = 0.05) {
   
   cpart_long <- cpart_data %>%
     pivot_longer(
-      cols = all_of(measure_cols),
+      cols = all_of(var_map$all),
       names_to = "measure",
       values_to = "cpart_value"
     ) %>%
@@ -241,36 +262,52 @@ identify_overlaps <- function(data, threshold = 0.05) {
   
   # Step 3: Join part and counterpart data to find overlaps
   overlaps <- part_long %>%
-    inner_join(cpart_long, by = c("fish_id", "measure")) %>%
+    inner_join(cpart_long, by = c("fish_id", "measure"))
+  
+  # Step 4: Calculate differences based on variable type
+  overlaps <- overlaps %>%
     mutate(
+      var_type = case_when(
+        measure %in% var_map$continuous ~ "continuous",
+        measure %in% var_map$count ~ "count",
+        measure %in% var_map$binary ~ "binary",
+        TRUE ~ "other"
+      ),
       scale = coalesce((part_scale + cpart_scale) / 2, part_scale, cpart_scale),
+      # For continuous vars: use relative difference
       absolute_diff = abs(part_value - cpart_value),
-      relative_diff = absolute_diff / scale,
-      exceeds_threshold = relative_diff > threshold
+      relative_diff = case_when(
+        var_type == "continuous" ~ absolute_diff / scale,
+        TRUE ~ as.numeric(absolute_diff > 0) # Binary indicator for non-continuous
+      ),
+      # Different flagging criteria based on variable type
+      exceeds_threshold = case_when(
+        var_type == "continuous" ~ relative_diff > threshold,
+        var_type == "count" ~ absolute_diff > 0, # Any difference for counts
+        var_type == "binary" ~ absolute_diff > 0, # Any difference for binary
+        TRUE ~ FALSE
+      )
     )
   
-  # Step 4: Get list of fish with overlaps
-  fish_with_overlaps <- overlaps %>%
+  # Step 5: Get list of fish with overlaps that meet criteria
+  fish_with_significant_overlaps <- overlaps %>%
+    filter(exceeds_threshold) %>%
     select(fish_id) %>%
     distinct() %>%
     pull(fish_id)
   
-  # Step 5: Separate fish with and without overlaps
+  # Step 6: Separate fish with and without significant overlaps
   overlap_fish <- data %>%
-    filter(fish_id %in% fish_with_overlaps)
+    filter(fish_id %in% fish_with_significant_overlaps)
   
   non_overlap_fish <- data %>%
-    filter(!fish_id %in% fish_with_overlaps)
+    filter(!fish_id %in% fish_with_significant_overlaps)
   
   # Convert results back to standard data.frames for consistency
-  overlap_metrics <- as.data.frame(overlaps)
-  overlap_fish <- as.data.frame(overlap_fish)
-  non_overlap_fish <- as.data.frame(non_overlap_fish)
-  
   return(list(
-    overlap_fish = overlap_fish,
-    non_overlap_fish = non_overlap_fish,
-    overlap_metrics = overlap_metrics
+    overlap_fish = as.data.frame(overlap_fish),
+    non_overlap_fish = as.data.frame(non_overlap_fish),
+    overlap_metrics = as.data.frame(overlaps)
   ))
 }
 
@@ -352,25 +389,44 @@ merge_non_overlap <- function(data) {
 ```{r}
 create_review_list <- function(overlap_results, threshold = 0.05) {
   # requires dplyr
-  
   metrics <- overlap_results$overlap_metrics
   
-  # Create summary by fish using dplyr grouping
+  # Get variable mappings
+  var_map <- variable_mapping()
+  
+  # Add more meaningful grouping and sorting
   summary <- metrics %>%
-    group_by(fish_id) %>%
+    # First summarize by fish and variable type
+    group_by(fish_id, var_type) %>%
     summarize(
-      has_significant_diff = any(exceeds_threshold),
-      num_overlapping_measures = n(),
-      num_exceeding_threshold = sum(exceeds_threshold),
-      max_relative_diff = max(relative_diff, na.rm = TRUE),
+      has_diffs = any(exceeds_threshold),
+      num_overlapping = n(),
+      num_with_diffs = sum(exceeds_threshold),
+      # For continuous vars, calculate max difference
+      max_relative_diff = if_else(
+        first(var_type) == "continuous", 
+        max(relative_diff, na.rm = TRUE), 
+        NA_real_
+      ),
       .groups = "drop"
     ) %>%
-    # Sort by number of concerning differences
-    arrange(desc(num_exceeding_threshold), desc(max_relative_diff))
+    # Then create a summary by fish
+    group_by(fish_id) %>%
+    summarize(
+      continuous_diffs = sum(var_type == "continuous" & has_diffs),
+      count_diffs = sum(var_type == "count" & has_diffs),
+      binary_diffs = sum(var_type == "binary" & has_diffs),
+      total_diffs = sum(has_diffs),
+      max_relative_diff = max(max_relative_diff, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    # Sort by total differences
+    arrange(desc(total_diffs), desc(continuous_diffs))
   
-  # Create detailed list
+  # Create a more detailed breakdown by measurement type
   details <- metrics %>%
-    arrange(fish_id, desc(relative_diff))
+    filter(exceeds_threshold) %>%
+    arrange(fish_id, var_type, desc(relative_diff))
   
   return(list(
     summary = as.data.frame(summary),
@@ -404,40 +460,6 @@ export_review_list <- function(review_results, file_prefix = "fish_review",
   return(list(
     summary = summary_path,
     details = details_path
-  ))
-}
-
-```
-
-## clean_fish_data
-```{r}
-clean_fish_data <- function(data, threshold = 0.05) {
-  # requires dplyr and tidyr
-  
-  # Step 1: Handle special cases for dorsal spines, etc.
-  corrected_data <- handle_special_cases(data)
-  
-  # Step 2: Identify overlapping and non-overlapping fish
-  overlap_results <- identify_overlaps_efficient(corrected_data, threshold)
-  
-  # Step 3: Merge the non-overlapping fish data
-  merged_non_overlap <- merge_non_overlap_fish(overlap_results$non_overlap_fish)
-  
-  # Step 4: Add a validation step
-  validation_results <- validate_data(
-    original = data,
-    corrected = corrected_data,
-    merged = merged_non_overlap,
-    overlaps = overlap_results$overlap_metrics
-  )
-  
-  # Return results
-  return(list(
-    merged_data = merged_non_overlap,
-    overlap_fish = overlap_results$overlap_fish,
-    overlap_metrics = overlap_results$overlap_metrics,
-    validation = validation_results,
-    original_data = data
   ))
 }
 
@@ -570,6 +592,65 @@ cat("Number of fish with overlapping measurements:",
     length(unique(overlap_results$overlap_metrics$fish_id)), "\n")
 cat("Number of fish without overlaps:", 
     length(unique(overlap_results$non_overlap_fish$fish_id)), "\n")
+
+```
+
+## Check if Missing Scale
+```{r}
+# Found ~43 records with missing scale information.
+# Below is code checking the source of these errors
+
+# Check how many fish have missing scale information
+scale_summary <- morph_corrected %>%
+  group_by(fish_id) %>%
+  summarize(
+    has_part_scale = any(!is.na(Scale_10mm[part_type == "P"])),
+    has_cpart_scale = any(!is.na(Scale_10mm[part_type == "C"])),
+    has_any_scale = has_part_scale | has_cpart_scale,
+    .groups = "drop"
+  )
+
+print(paste("Fish without any scale information:", 
+            sum(!scale_summary$has_any_scale), 
+            "out of", nrow(scale_summary)))
+
+# Check specifically which problems are causing the non-finite relative_diff values
+problem_rows <- overlap_results$overlap_metrics %>% 
+  filter(!is.finite(relative_diff)) %>%
+  mutate(
+    problem_type = case_when(
+      is.na(part_scale) & is.na(cpart_scale) ~ "both_scales_missing",
+      is.na(part_scale) ~ "part_scale_missing",
+      is.na(cpart_scale) ~ "cpart_scale_missing",
+      scale == 0 ~ "zero_scale",
+      is.na(part_value) | is.na(cpart_value) ~ "measurement_missing",
+      TRUE ~ "other_issue"
+    )
+  )
+
+# Summarize the types of problems
+problem_summary <- problem_rows %>%
+  group_by(problem_type) %>%
+  summarize(count = n(), .groups = "drop")
+
+print(problem_summary)
+
+# Get list of fish IDs missing scales
+fish_missing_scales <- scale_summary %>%
+  filter(!has_any_scale) %>%
+  pull(fish_id)
+
+# Create report of fish missing scale information
+missing_scales_detail <- morph %>%
+  filter(fish_id %in% fish_missing_scales) %>%
+  select(fish_id, ID, part_type, Scale_10mm) %>%
+  arrange(fish_id, part_type)
+
+# Write the detailed report
+write.csv(missing_scales_detail, 
+          file = paste0(p$`1.data/c.flagged`, "/fish_missing_scales_detailed.csv"), 
+          row.names = FALSE)
+
 ```
 
 #==============================================================================#
@@ -617,11 +698,23 @@ ggplot(overlap_by_measure, aes(x = reorder(measure, count), y = count)) +
        y = "Count of fish with duplicates")
 
 # Visualization 3: Distribution of flags per fish
-ggplot(review_results$summary, aes(x = num_overlapping_measures)) +
+ggplot(review_results$summary, aes(x = total_diffs)) +
   geom_histogram(binwidth = 1, fill = "coral") +
   theme_minimal() +
   labs(title = "Distribution of duplicate measurements per fish",
        x = "Number of duplicate measurements",
        y = "Count of fish")
+
+# Visualization 4: Distribution of differences by variable type
+ggplot(overlap_results$overlap_metrics, 
+       aes(x = var_type, y = absolute_diff, fill = var_type)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal() +
+  labs(title = "Distribution of Differences by Variable Type",
+       x = "Variable Type", 
+       y = "Absolute Difference",
+       fill = "Variable Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
