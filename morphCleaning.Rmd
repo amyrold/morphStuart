@@ -368,16 +368,84 @@ merge_non_overlap <- function(data) {
     # Create a results row
     result_row <- data.frame(fish_id = id)
     
-    # If only one part type exists, use that directly
-    if (nrow(part_data) == 0 || nrow(cpart_data) == 0) {
-      result_row <- if(nrow(part_data) > 0) part_data[1,] else cpart_data[1,]
+    # If only one part type exists, use that directly (but still aggregate if multiple rows)
+    if (nrow(part_data) == 0) {
+      # No part data, use aggregated counterpart data
+      if (nrow(cpart_data) > 0) {
+        # Use first row for metadata
+        template_row <- cpart_data[1,]
+        for (col in id_cols) {
+          if (col != "part_type") {
+            result_row[[col]] <- template_row[[col]]
+          } else {
+            result_row[[col]] <- "merged"
+          }
+        }
+        
+        # Aggregate counterpart measurements
+        for (col in measure_cols) {
+          var_type <- "continuous"  # default
+          if (col %in% var_map$binary) var_type <- "binary"
+          if (col %in% var_map$count) var_type <- "count"
+          
+          values <- cpart_data[[col]]
+          values <- values[!is.na(values)]
+          
+          if (length(values) > 0) {
+            if (var_type %in% c("binary", "count")) {
+              result_row[[col]] <- max(values)
+            } else {
+              result_row[[col]] <- mean(values)
+            }
+          } else {
+            result_row[[col]] <- NA
+          }
+        }
+      }
+      result_row$part_type <- "merged"
+      result_row$merged <- TRUE
+      result_list[[i]] <- result_row
+      next
+    } else if (nrow(cpart_data) == 0) {
+      # No counterpart data, use aggregated part data
+      # Use first row for metadata
+      template_row <- part_data[1,]
+      for (col in id_cols) {
+        if (col != "part_type") {
+          result_row[[col]] <- template_row[[col]]
+        } else {
+          result_row[[col]] <- "merged"
+        }
+      }
+      
+      # Aggregate part measurements
+      for (col in measure_cols) {
+        var_type <- "continuous"  # default
+        if (col %in% var_map$binary) var_type <- "binary"
+        if (col %in% var_map$count) var_type <- "count"
+        
+        values <- part_data[[col]]
+        values <- values[!is.na(values)]
+        
+        if (length(values) > 0) {
+          if (var_type %in% c("binary", "count")) {
+            result_row[[col]] <- max(values)
+          } else {
+            result_row[[col]] <- mean(values)
+          }
+        } else {
+          result_row[[col]] <- NA
+        }
+      }
       result_row$part_type <- "merged"
       result_row$merged <- TRUE
       result_list[[i]] <- result_row
       next
     }
     
-    # Handle metadata - use first part row for metadata
+    # Both part and counterpart exist - aggregate them separately then merge
+    
+    # Use first part row for metadata
     template_row <- part_data[1,]
     for (col in id_cols) {
       if (col != "part_type") {
@@ -388,30 +456,35 @@ merge_non_overlap <- function(data) {
     }
     result_row$merged <- TRUE
     
-    # For each measurement column, merge values prioritizing part over counterpart
+    # For each measurement column, aggregate first, then merge values prioritizing part over counterpart
     for (col in measure_cols) {
       # Determine variable type
       var_type <- "continuous"  # default
       if (col %in% var_map$binary) var_type <- "binary"
       if (col %in% var_map$count) var_type <- "count"
       
-      # Get values from part and counterpart
+      # Aggregate part values
       part_vals <- part_data[[col]]
       part_vals <- part_vals[!is.na(part_vals)]
-      
-      cpart_vals <- cpart_data[[col]]
-      cpart_vals <- cpart_vals[!is.na(cpart_vals)]
-      
-      # Aggregate values based on type
       part_val <- NA
-      cpart_val <- NA
-      
       if (length(part_vals) > 0) {
-        part_val <- if (var_type %in% c("binary", "count")) max(part_vals) else mean(part_vals)
+        if (var_type %in% c("binary", "count")) {
+          part_val <- max(part_vals)
+        } else {
+          part_val <- mean(part_vals)
+        }
       }
       
+      # Aggregate counterpart values
+      cpart_vals <- cpart_data[[col]]
+      cpart_vals <- cpart_vals[!is.na(cpart_vals)]
+      cpart_val <- NA
       if (length(cpart_vals) > 0) {
-        cpart_val <- if (var_type %in% c("binary", "count")) max(cpart_vals) else mean(cpart_vals)
+        if (var_type %in% c("binary", "count")) {
+          cpart_val <- max(cpart_vals)
+        } else {
+          cpart_val <- mean(cpart_vals)
+        }
       }
       
       # Priority: part > counterpart
@@ -445,7 +518,6 @@ merge_non_overlap <- function(data) {
   
   return(as.data.frame(result))
 }
-
 ```
 
 ## create_review_list
