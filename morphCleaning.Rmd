@@ -321,7 +321,7 @@ merge_non_overlap <- function(data) {
   fish_ids <- unique(data$fish_id)
   
   # Define measurement columns
-  id_cols <- c("n", "ID", "fish_id", "part_type")
+  id_cols <- c("n", "ID", "fish_id", "part_type", "bin")
   measure_cols <- setdiff(names(data), id_cols)
   
   # Initialize empty dataframe for results
@@ -589,9 +589,6 @@ length(negative_lengths$ID) # No negative measurements
 # DATA PREPROCESSING
 ## Handle Special Cases
 ```{r Spine and Girdle Logic}
-# Apply logic for dorsal spines and pelvic girdle:
-# - If *NA = 1, corresponding measurements should be NA (poor preservation)
-# - If *NA = 0 and respective count = 0, length measurements should be 0 (biologically absent)
 
 morph_corrected <- handle_special_cases(morph)
 
@@ -624,9 +621,9 @@ scale_summary <- morph_corrected %>%
     .groups = "drop"
   )
 
-print(paste("Fish without any scale information:", 
-            sum(!scale_summary$has_any_scale), 
-            "out of", nrow(scale_summary)))
+#print(paste("Fish without any scale information:", 
+            # sum(!scale_summary$has_any_scale), 
+            # "out of", nrow(scale_summary)))
 
 # Check specifically which problems are causing the non-finite relative_diff values
 problem_rows <- overlap_results$overlap_metrics %>% 
@@ -647,7 +644,7 @@ problem_summary <- problem_rows %>%
   group_by(problem_type) %>%
   summarize(count = n(), .groups = "drop")
 
-print(problem_summary)
+# print(problem_summary)
 
 # Get list of fish IDs missing scales
 fish_missing_scales <- scale_summary %>%
