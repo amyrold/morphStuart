@@ -241,30 +241,43 @@ identify_overlaps <- function(data, threshold = 0.05) {
     filter(part_type == "C") %>%
     select(fish_id, part_type, row_id = n, Scale_10mm, all_of(var_map$all))
   
-  # Step 2: Gather measurements into long format for easier comparison
-  part_long <- part_data %>%
+  # Step 2: For each fish and measurement, aggregate values to avoid many-to-many joins
+  # This preserves information about which fish have duplicates without creating cartesian products
+  part_agg <- part_data %>%
     pivot_longer(
       cols = all_of(var_map$all),
       names_to = "measure",
-      values_to = "part_value"
+      values_to = "value"
     ) %>%
-    filter(!is.na(part_value)) %>%
-    select(fish_id, part_row_id = row_id, measure, part_value, part_scale = Scale_10mm)
+    filter(!is.na(value)) %>%
+    group_by(fish_id, measure) %>%
+    summarize(
+      part_value = if(first(measure) %in% var_map$binary) max(value) else mean(value),
+      part_scale = mean(Scale_10mm, na.rm = TRUE),
+      has_multiple_values = n() > 1,
+      .groups = "drop"
+    )
   
-  cpart_long <- cpart_data %>%
+  cpart_agg <- cpart_data %>%
     pivot_longer(
       cols = all_of(var_map$all),
       names_to = "measure",
-      values_to = "cpart_value"
+      values_to = "value"
     ) %>%
-    filter(!is.na(cpart_value)) %>%
-    select(fish_id, cpart_row_id = row_id, measure, cpart_value, cpart_scale = Scale_10mm)
+    filter(!is.na(value)) %>%
+    group_by(fish_id, measure) %>%
+    summarize(
+      cpart_value = if(first(measure) %in% var_map$binary) max(value) else mean(value),
+      cpart_scale = mean(Scale_10mm, na.rm = TRUE),
+      has_multiple_values = n() > 1,
+      .groups = "drop"
+    )
   
-  # Step 3: Join part and counterpart data to find overlaps
-  overlaps <- part_long %>%
-    inner_join(cpart_long, by = c("fish_id", "measure"))
+  # Step 3: Join part and counterpart data to find overlaps (now a one-to-one join)
+  overlaps <- part_agg %>%
+    inner_join(cpart_agg, by = c("fish_id", "measure"))
   
-  # Step 4: Calculate differences based on variable type
+  # Step 4: Calculate differences with appropriate handling for each variable type
   overlaps <- overlaps %>%
     mutate(
       var_type = case_when(
@@ -274,36 +287,46 @@ identify_overlaps <- function(data, threshold = 0.05) {
         TRUE ~ "other"
       ),
       scale = coalesce((part_scale + cpart_scale) / 2, part_scale, cpart_scale),
-      # For continuous vars: use relative difference
       absolute_diff = abs(part_value - cpart_value),
+      
+      # Modified approach for different variable types
       relative_diff = case_when(
-        var_type == "continuous" ~ absolute_diff / scale,
-        TRUE ~ as.numeric(absolute_diff > 0) # Binary indicator for non-continuous
+        # For continuous: relative to scale
+        var_type == "continuous" & scale > 0 ~ absolute_diff / scale,
+        # For count: proportion of max value
+        var_type == "count" ~ absolute_diff / max(1, pmax(part_value, cpart_value)),
+        # For binary: 0 or 1
+        TRUE ~ as.numeric(absolute_diff > 0)
       ),
-      # Different flagging criteria based on variable type
+      
+      # Flag criteria - customized by variable type
       exceeds_threshold = case_when(
         var_type == "continuous" ~ relative_diff > threshold,
-        var_type == "count" ~ absolute_diff > 0, # Any difference for counts
-        var_type == "binary" ~ absolute_diff > 0, # Any difference for binary
+        var_type == "count" ~ absolute_diff > 0, # Any difference in counts
+        var_type == "binary" ~ FALSE, # Never flag binary (we'll take max)
         TRUE ~ FALSE
-      )
+      ),
+      
+      # Additional flag if either part/counterpart has multiple values for this measure
+      multiple_measurements = has_multiple_values.x | has_multiple_values.y
     )
   
-  # Step 5: Get list of fish with overlaps that meet criteria
-  fish_with_significant_overlaps <- overlaps %>%
+  # Step 5: Determine fish to flag based on any exceeding threshold
+  fish_to_flag <- overlaps %>%
     filter(exceeds_threshold) %>%
     select(fish_id) %>%
     distinct() %>%
     pull(fish_id)
   
-  # Step 6: Separate fish with and without significant overlaps
+  # Step 6: Split data into flagged and non-flagged groups
+  # This maintains the original structure (multiple rows possible per fish/part)
   overlap_fish <- data %>%
-    filter(fish_id %in% fish_with_significant_overlaps)
+    filter(fish_id %in% fish_to_flag)
   
   non_overlap_fish <- data %>%
-    filter(!fish_id %in% fish_with_significant_overlaps)
+    filter(!fish_id %in% fish_to_flag)
   
-  # Convert results back to standard data.frames for consistency
+  # Return original format data frames
   return(list(
     overlap_fish = as.data.frame(overlap_fish),
     non_overlap_fish = as.data.frame(non_overlap_fish),
@@ -574,7 +597,6 @@ length(multi_row_fish$fish_id) # 361 fish with duplicate "parts" or "counter par
 ## Basic Quality Check
 ```{r}
 # Check for implausible values in measurement columns
-# Example for length measurements (adjust for your specific columns)
 length_cols <- c("SL", "CAV", "DS1", "DS2", "DS3", "LPT", "PSP.L", "PSP.R", "TPG", "ECT", "CLE", "PMX")
 
 # Check for negative values in length columns
