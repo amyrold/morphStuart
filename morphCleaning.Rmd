@@ -139,6 +139,388 @@ p <- new_project(0, subfolders = c("1.data", "1.data/a.raw", "1.data/b.merged",
 ```
 
 #==============================================================================#
+# FUNCTIONS
+## handle_special_cases
+```{r}
+handle_special_cases <- function(data) {
+  # Load necessary packages
+  if (!requireNamespace("dplyr", quietly = TRUE)) {
+    install.packages("dplyr")
+  }
+  library(dplyr)
+  
+  # Use dplyr to handle all the special cases with cleaner syntax
+  cleaned <- data %>%
+    as_tibble() %>%
+    # Handle dorsal spine columns - use case_when for readable conditional logic
+    mutate(
+      # Dorsal spine 1
+      DS1 = case_when(
+        MDS1 == 0 & MDS1NA == 1 ~ NA_real_,
+        MDS1 == 0 & MDS1NA == 0 & is.na(DS1) ~ 0,
+        TRUE ~ DS1
+      ),
+      # Dorsal spine 2
+      DS2 = case_when(
+        MDS2 == 0 & MDS2NA == 1 ~ NA_real_,
+        MDS2 == 0 & MDS2NA == 0 & is.na(DS2) ~ 0,
+        TRUE ~ DS2
+      ),
+      # Dorsal spine 3
+      DS3 = case_when(
+        MDS3 == 0 & MDS3NA == 1 ~ NA_real_,
+        MDS3 == 0 & MDS3NA == 0 & is.na(DS3) ~ 0,
+        TRUE ~ DS3
+      ),
+      
+      # Handle MPT (pre-dorsal pterygiophores)
+      MPT = case_when(
+        MPT == 0 & (MDS1 == 1 | MDS2 == 1 | MDS3 == 1) ~ NA_real_,
+        TRUE ~ MPT
+      ),
+      
+      # Handle pelvic spine columns
+      PSP.L = case_when(
+        MPSP == 0 & MPSPNA == 1 ~ NA_real_,
+        TRUE ~ PSP.L
+      ),
+      PSP.R = case_when(
+        MPSP == 0 & MPSPNA == 1 ~ NA_real_,
+        TRUE ~ PSP.R
+      )
+    )
+  
+  # When TPGNA column is available, apply similar logic to TPG
+  if ("TPGNA" %in% names(cleaned)) {
+    cleaned <- cleaned %>%
+      mutate(
+        TPG = case_when(
+          TPGNA == 1 ~ NA_real_,
+          TRUE ~ TPG
+        )
+      )
+  }
+  
+  return(as.data.frame(cleaned))
+}
+
+```
+
+## identify_overlaps
+```{r}
+identify_overlaps <- function(data, threshold = 0.05) {
+  # Requires tidyr and dplyr
+  
+  # Define measurement columns
+  measure_cols <- c("SL", "CAV", "DS1", "DS2", "DS3", "MDF", "MAF", "MCV", "MAV", 
+                    "MPT", "LPT", "PSP.L", "PSP.R", "TPG", "ECT", "CLE", "PMX")
+  
+  # Step 1: Create separate dataframes for part and counterpart data
+  part_data <- data %>% 
+    filter(part_type == "P") %>%
+    select(fish_id, part_type, row_id = n, Scale_10mm, all_of(measure_cols))
+  
+  cpart_data <- data %>% 
+    filter(part_type == "C") %>%
+    select(fish_id, part_type, row_id = n, Scale_10mm, all_of(measure_cols))
+  
+  # Step 2: Gather measurements into long format for easier comparison
+  part_long <- part_data %>%
+    pivot_longer(
+      cols = all_of(measure_cols),
+      names_to = "measure",
+      values_to = "part_value"
+    ) %>%
+    filter(!is.na(part_value)) %>%
+    select(fish_id, part_row_id = row_id, measure, part_value, part_scale = Scale_10mm)
+  
+  cpart_long <- cpart_data %>%
+    pivot_longer(
+      cols = all_of(measure_cols),
+      names_to = "measure",
+      values_to = "cpart_value"
+    ) %>%
+    filter(!is.na(cpart_value)) %>%
+    select(fish_id, cpart_row_id = row_id, measure, cpart_value, cpart_scale = Scale_10mm)
+  
+  # Step 3: Join part and counterpart data to find overlaps
+  overlaps <- part_long %>%
+    inner_join(cpart_long, by = c("fish_id", "measure")) %>%
+    mutate(
+      scale = coalesce((part_scale + cpart_scale) / 2, part_scale, cpart_scale),
+      absolute_diff = abs(part_value - cpart_value),
+      relative_diff = absolute_diff / scale,
+      exceeds_threshold = relative_diff > threshold
+    )
+  
+  # Step 4: Get list of fish with overlaps
+  fish_with_overlaps <- overlaps %>%
+    select(fish_id) %>%
+    distinct() %>%
+    pull(fish_id)
+  
+  # Step 5: Separate fish with and without overlaps
+  overlap_fish <- data %>%
+    filter(fish_id %in% fish_with_overlaps)
+  
+  non_overlap_fish <- data %>%
+    filter(!fish_id %in% fish_with_overlaps)
+  
+  # Convert results back to standard data.frames for consistency
+  overlap_metrics <- as.data.frame(overlaps)
+  overlap_fish <- as.data.frame(overlap_fish)
+  non_overlap_fish <- as.data.frame(non_overlap_fish)
+  
+  return(list(
+    overlap_fish = overlap_fish,
+    non_overlap_fish = non_overlap_fish,
+    overlap_metrics = overlap_metrics
+  ))
+}
+
+```
+## merge_non_overlap
+```{r}
+merge_non_overlap <- function(data) {
+  # Load necessary packages
+  if (!requireNamespace("dplyr", quietly = TRUE) ||
+      !requireNamespace("tidyr", quietly = TRUE)) {
+    install.packages(c("dplyr", "tidyr"))
+  }
+  library(dplyr)
+  library(tidyr)
+  
+  # Get unique fish IDs
+  fish_ids <- unique(data$fish_id)
+  
+  # Define measurement columns
+  id_cols <- c("n", "ID", "fish_id", "part_type")
+  measure_cols <- setdiff(names(data), id_cols)
+  
+  # Initialize empty dataframe for results
+  result_list <- list()
+  
+  # Process each fish - some looping is still needed for the logical merging
+  for (i in seq_along(fish_ids)) {
+    id <- fish_ids[i]
+    
+    # Get all data for this fish
+    fish_data <- data %>% 
+      filter(fish_id == id)
+    
+    # If only one row, just use it directly
+    if (nrow(fish_data) == 1) {
+      result_list[[i]] <- fish_data
+      next
+    }
+    
+    # Step 1: Convert to long format (each measurement becomes a row)
+    fish_long <- fish_data %>%
+      pivot_longer(
+        cols = all_of(measure_cols),
+        names_to = "variable",
+        values_to = "value"
+      ) %>%
+      filter(!is.na(value))  # Remove NA values
+    
+    # Step 2: Prioritize part rows (P) over counterpart rows (C)
+    merged_values <- fish_long %>%
+      group_by(variable) %>%
+      arrange(variable, ifelse(part_type == "P", 1, 2)) %>%  # Sort P before C
+      slice(1) %>%  # Take first row in each group (prioritizes P)
+      ungroup()
+    
+    # Step 3: Convert back to wide format
+    merged_row <- merged_values %>%
+      select(variable, value) %>%
+      pivot_wider(
+        names_from = "variable",
+        values_from = "value"
+      ) 
+    
+    # Step 4: Add back fish_id and set part_type to "merged"
+    merged_row <- merged_row %>%
+      mutate(
+        fish_id = id,
+        part_type = "merged",
+        merged = TRUE
+      )
+    
+    # Add to result list
+    result_list[[i]] <- merged_row
+  }
+  
+  # Combine all results
+  result <- bind_rows(result_list)
+  
+  return(as.data.frame(result))
+}
+
+```
+
+## create_review_list
+```{r}
+create_review_list <- function(overlap_results, threshold = 0.05) {
+  # Load necessary packages
+  if (!requireNamespace("dplyr", quietly = TRUE)) {
+    install.packages("dplyr")
+  }
+  library(dplyr)
+  
+  metrics <- overlap_results$overlap_metrics
+  
+  # Create summary by fish using dplyr grouping
+  summary <- metrics %>%
+    group_by(fish_id) %>%
+    summarize(
+      has_significant_diff = any(exceeds_threshold),
+      num_overlapping_measures = n(),
+      num_exceeding_threshold = sum(exceeds_threshold),
+      max_relative_diff = max(relative_diff, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    # Sort by number of concerning differences
+    arrange(desc(num_exceeding_threshold), desc(max_relative_diff))
+  
+  # Create detailed list
+  details <- metrics %>%
+    arrange(fish_id, desc(relative_diff))
+  
+  return(list(
+    summary = as.data.frame(summary),
+    details = as.data.frame(details)
+  ))
+}
+
+```
+
+## export_review_list
+```{r}
+export_review_list <- function(review_results, file_prefix = "fish_review", output_dir = NULL) {
+  # Create output directory if specified and it doesn't exist
+  if (!is.null(output_dir)) {
+    if (!dir.exists(output_dir)) {
+      dir.create(output_dir, recursive = TRUE)
+    }
+    summary_path <- file.path(output_dir, paste0(file_prefix, "_summary.csv"))
+    details_path <- file.path(output_dir, paste0(file_prefix, "_details.csv"))
+  } else {
+    summary_path <- paste0(file_prefix, "_summary.csv")
+    details_path <- paste0(file_prefix, "_details.csv")
+  }
+  
+  # Export files
+  readr::write_csv(review_results$summary, summary_path)
+  readr::write_csv(review_results$details, details_path)
+  
+  # Return file paths
+  return(list(
+    summary = summary_path,
+    details = details_path
+  ))
+}
+
+```
+
+## clean_fish_data
+```{r}
+clean_fish_data <- function(data, threshold = 0.05) {
+  # Load necessary packages
+  if (!requireNamespace("dplyr", quietly = TRUE) ||
+      !requireNamespace("tidyr", quietly = TRUE)) {
+    install.packages(c("dplyr", "tidyr"))
+  }
+  library(dplyr)
+  library(tidyr)
+  
+  # Step 1: Handle special cases for dorsal spines, etc.
+  corrected_data <- handle_special_cases(data)
+  
+  # Step 2: Identify overlapping and non-overlapping fish
+  overlap_results <- identify_overlaps_efficient(corrected_data, threshold)
+  
+  # Step 3: Merge the non-overlapping fish data
+  merged_non_overlap <- merge_non_overlap_fish(overlap_results$non_overlap_fish)
+  
+  # Step 4: Add a validation step
+  validation_results <- validate_data(
+    original = data,
+    corrected = corrected_data,
+    merged = merged_non_overlap,
+    overlaps = overlap_results$overlap_metrics
+  )
+  
+  # Return results
+  return(list(
+    merged_data = merged_non_overlap,
+    overlap_fish = overlap_results$overlap_fish,
+    overlap_metrics = overlap_results$overlap_metrics,
+    validation = validation_results,
+    original_data = data
+  ))
+}
+
+# Add a validation function to ensure data quality
+validate_data <- function(original, corrected, merged, overlaps) {
+  library(dplyr)
+  
+  # Initialize results
+  validation <- list()
+  
+  # Check if any rows were lost
+  total_specimens_original <- length(unique(original$fish_id))
+  total_specimens_after <- length(unique(c(
+    merged$fish_id, 
+    unique(overlaps$fish_id)
+  )))
+  
+  validation$all_specimens_accounted_for <- 
+    total_specimens_original == total_specimens_after
+  
+  validation$specimen_counts <- tibble(
+    stage = c("Original", "Merged", "Flagged for review", "Total after processing"),
+    count = c(
+      total_specimens_original,
+      length(unique(merged$fish_id)),
+      length(unique(overlaps$fish_id)),
+      total_specimens_after
+    )
+  )
+  
+  # Check special case handling
+  special_case_check <- corrected %>%
+    filter(
+      (MDS1 == 0 & MDS1NA == 1 & !is.na(DS1)) |
+      (MDS2 == 0 & MDS2NA == 1 & !is.na(DS2)) |
+      (MDS3 == 0 & MDS3NA == 1 & !is.na(DS3)) |
+      (MPT == 0 & (MDS1 == 1 | MDS2 == 1 | MDS3 == 1)) |
+      (MPSP == 0 & MPSPNA == 1 & (!is.na(PSP.L) | !is.na(PSP.R)))
+    )
+  
+  validation$special_cases_properly_handled <- nrow(special_case_check) == 0
+  validation$problematic_rows <- special_case_check
+  
+  return(validation)
+}
+
+```
+
+```{r}
+
+
+```
+
+```{r}
+
+
+```
+
+```{r}
+
+
+```
+
+#==============================================================================#
 # DATA IMPORT
 ```{r}
 # Read in data and check initial structure
@@ -170,6 +552,7 @@ sum(missing_parts$`NA`) # 14 fish without both "part" & "counter part"
 multi_row_fish <- fish_part_counts %>%
   filter(P > 1 | C > 1)
 length(multi_row_fish$fish_id) # 361 fish with duplicate "parts" or "counter parts"
+
 ```
 
 ## Basic Quality Check
