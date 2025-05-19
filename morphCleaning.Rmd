@@ -533,11 +533,25 @@ morph <- read.csv(paste0(p$`1.data/a.raw`, "241015_PitLMorph.csv"))
 ## ID Structure Analysis
 ```{r}
 # Extract fish ID and part type
+# ID format: VXXXXXX_LXXXX(A)_1_P/C.jpg 
+# where VXXXXXX is the specimen ID, LXXXX(A) is the bin/locality, and P/C indicates part/counterpart
 morph <- morph %>%
   mutate(
-    fish_id = str_remove(ID, "_[PC]\\.jpg$"),
-    part_type = str_extract(ID, "[PC](?=\\.jpg$)")
-  )
+    fish_id = str_extract(ID, "^V\\d+"),                          # Extract VXXXXX part at beginning
+    bin_raw = str_extract(ID, "L\\d+[A-Za-z]?"),                  # Extract LXXXX with optional letter
+    # Split bin into letter prefix, number, and suffix
+    bin_letter = str_extract(bin_raw, "^L"),
+    bin_number = str_extract(bin_raw, "\\d+"),
+    bin_suffix = str_extract(bin_raw, "[A-Za-z]$"),
+    # Create standardized bin with zero padding
+    bin = case_when(
+      !is.na(bin_suffix) ~ paste0(bin_letter, str_pad(bin_number, 4, pad = "0"), bin_suffix),
+      !is.na(bin_number) ~ paste0(bin_letter, str_pad(bin_number, 4, pad = "0")),
+      TRUE ~ NA_character_
+    ),
+    part_type = str_extract(ID, "[PC](?=\\.jpg$)")               # Extract P or C before .jpg
+  ) %>%
+  select(-bin_raw, -bin_letter, -bin_number, -bin_suffix)        # Remove intermediate columns
 
 # Count rows per fish and part type
 fish_part_counts <- morph %>%
