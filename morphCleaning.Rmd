@@ -143,11 +143,7 @@ p <- new_project(0, subfolders = c("1.data", "1.data/a.raw", "1.data/b.merged",
 ## handle_special_cases
 ```{r}
 handle_special_cases <- function(data) {
-  # Load necessary packages
-  if (!requireNamespace("dplyr", quietly = TRUE)) {
-    install.packages("dplyr")
-  }
-  library(dplyr)
+  # requires dplyr
   
   # Use dplyr to handle all the special cases with cleaner syntax
   cleaned <- data %>%
@@ -282,13 +278,7 @@ identify_overlaps <- function(data, threshold = 0.05) {
 ## merge_non_overlap
 ```{r}
 merge_non_overlap <- function(data) {
-  # Load necessary packages
-  if (!requireNamespace("dplyr", quietly = TRUE) ||
-      !requireNamespace("tidyr", quietly = TRUE)) {
-    install.packages(c("dplyr", "tidyr"))
-  }
-  library(dplyr)
-  library(tidyr)
+  # requires dplyr and tidyr
   
   # Get unique fish IDs
   fish_ids <- unique(data$fish_id)
@@ -361,11 +351,7 @@ merge_non_overlap <- function(data) {
 ## create_review_list
 ```{r}
 create_review_list <- function(overlap_results, threshold = 0.05) {
-  # Load necessary packages
-  if (!requireNamespace("dplyr", quietly = TRUE)) {
-    install.packages("dplyr")
-  }
-  library(dplyr)
+  # requires dplyr
   
   metrics <- overlap_results$overlap_metrics
   
@@ -396,7 +382,8 @@ create_review_list <- function(overlap_results, threshold = 0.05) {
 
 ## export_review_list
 ```{r}
-export_review_list <- function(review_results, file_prefix = "fish_review", output_dir = NULL) {
+export_review_list <- function(review_results, file_prefix = "fish_review", 
+                               output_dir = NULL) {
   # Create output directory if specified and it doesn't exist
   if (!is.null(output_dir)) {
     if (!dir.exists(output_dir)) {
@@ -425,13 +412,7 @@ export_review_list <- function(review_results, file_prefix = "fish_review", outp
 ## clean_fish_data
 ```{r}
 clean_fish_data <- function(data, threshold = 0.05) {
-  # Load necessary packages
-  if (!requireNamespace("dplyr", quietly = TRUE) ||
-      !requireNamespace("tidyr", quietly = TRUE)) {
-    install.packages(c("dplyr", "tidyr"))
-  }
-  library(dplyr)
-  library(tidyr)
+  # requires dplyr and tidyr
   
   # Step 1: Handle special cases for dorsal spines, etc.
   corrected_data <- handle_special_cases(data)
@@ -460,9 +441,13 @@ clean_fish_data <- function(data, threshold = 0.05) {
   ))
 }
 
+```
+
+## validate_data
+```{r}
 # Add a validation function to ensure data quality
 validate_data <- function(original, corrected, merged, overlaps) {
-  library(dplyr)
+  # requires dplyr
   
   # Initialize results
   validation <- list()
@@ -502,11 +487,6 @@ validate_data <- function(original, corrected, merged, overlaps) {
   
   return(validation)
 }
-
-```
-
-```{r}
-
 
 ```
 
