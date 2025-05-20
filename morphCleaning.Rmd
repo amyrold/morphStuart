@@ -702,7 +702,7 @@ sum(missing_parts$`NA`) # 14 fish without both "part" & "counter part"
 # Fish with excessive rows
 multi_row_fish <- fish_part_counts %>%
   filter(P > 1 | C > 1)
-length(multi_row_fish$fish_id) # 361 fish with duplicate "parts" or "counter parts"
+length(multi_row_fish$fish_id) # 374 fish with duplicate "parts" or "counter parts"
 
 ```
 
@@ -717,6 +717,60 @@ negative_lengths <- morph %>%
   pivot_longer(cols = -ID, names_to = "measure", values_to = "value") %>%
   filter(value < 0)
 length(negative_lengths$ID) # No negative measurements
+
+```
+
+## Flag missing Scale_10mm
+```{r}
+# Check for missing scale information
+scale_summary <- morph %>%
+  group_by(fish_id) %>%
+  summarize(
+    has_part_scale = any(!is.na(Scale_10mm[part_type == "P"])),
+    has_cpart_scale = any(!is.na(Scale_10mm[part_type == "C"])),
+    has_any_scale = has_part_scale | has_cpart_scale,
+    .groups = "drop"
+  )
+
+# Get list of fish IDs missing scales
+fish_missing_scales <- scale_summary %>%
+  filter(!has_any_scale) %>%
+  pull(fish_id)
+
+# Create report of fish missing scale information
+missing_scales_detail <- morph %>%
+  filter(fish_id %in% fish_missing_scales) %>%
+  select(fish_id, ID, part_type, Scale_10mm) %>%
+  arrange(fish_id, part_type)
+
+# Write the detailed report
+write.csv(missing_scales_detail, 
+          file = paste0(p$`1.data/c.flagged`, "/fish_missing_scales_detailed.csv"), 
+          row.names = FALSE)
+
+# Print summary of scale check
+cat("Fish without any scale information:", 
+    sum(!scale_summary$has_any_scale), 
+    "out of", nrow(scale_summary), "\n")
+
+# Split the dataset
+morph_with_scales <- morph %>%
+  filter(!fish_id %in% fish_missing_scales)
+
+morph_without_scales <- morph %>%
+  filter(fish_id %in% fish_missing_scales)
+
+# Continue with the fish that have scale measurements
+morph <- morph_with_scales
+
+# Write the datasets to separate files for reference
+write.csv(morph_with_scales, 
+          file = paste0(p$`1.data/a.raw`, "/fish_with_scales.csv"), 
+          row.names = FALSE)
+
+write.csv(morph_without_scales, 
+          file = paste0(p$`1.data/c.flagged`, "/fish_without_scales.csv"), 
+          row.names = FALSE)
 ```
 
 #==============================================================================#
@@ -737,64 +791,6 @@ cat("Number of fish with overlapping measurements:",
     length(unique(overlap_results$overlap_metrics$fish_id)), "\n")
 cat("Number of fish without overlaps:", 
     length(unique(overlap_results$non_overlap_fish$fish_id)), "\n")
-
-```
-
-## Check if Missing Scale
-```{r}
-# Found ~43 records with missing scale information.
-# Below is code checking the source of these errors
-
-# Check how many fish have missing scale information
-scale_summary <- morph_corrected %>%
-  group_by(fish_id) %>%
-  summarize(
-    has_part_scale = any(!is.na(Scale_10mm[part_type == "P"])),
-    has_cpart_scale = any(!is.na(Scale_10mm[part_type == "C"])),
-    has_any_scale = has_part_scale | has_cpart_scale,
-    .groups = "drop"
-  )
-
-#print(paste("Fish without any scale information:", 
-            # sum(!scale_summary$has_any_scale), 
-            # "out of", nrow(scale_summary)))
-
-# Check specifically which problems are causing the non-finite relative_diff values
-problem_rows <- overlap_results$overlap_metrics %>% 
-  filter(!is.finite(relative_diff)) %>%
-  mutate(
-    problem_type = case_when(
-      is.na(part_scale) & is.na(cpart_scale) ~ "both_scales_missing",
-      is.na(part_scale) ~ "part_scale_missing",
-      is.na(cpart_scale) ~ "cpart_scale_missing",
-      scale == 0 ~ "zero_scale",
-      is.na(part_value) | is.na(cpart_value) ~ "measurement_missing",
-      TRUE ~ "other_issue"
-    )
-  )
-
-# Summarize the types of problems
-problem_summary <- problem_rows %>%
-  group_by(problem_type) %>%
-  summarize(count = n(), .groups = "drop")
-
-# print(problem_summary)
-
-# Get list of fish IDs missing scales
-fish_missing_scales <- scale_summary %>%
-  filter(!has_any_scale) %>%
-  pull(fish_id)
-
-# Create report of fish missing scale information
-missing_scales_detail <- morph %>%
-  filter(fish_id %in% fish_missing_scales) %>%
-  select(fish_id, ID, part_type, Scale_10mm) %>%
-  arrange(fish_id, part_type)
-
-# Write the detailed report
-write.csv(missing_scales_detail, 
-          file = paste0(p$`1.data/c.flagged`, "/fish_missing_scales_detailed.csv"), 
-          row.names = FALSE)
 
 ```
 
