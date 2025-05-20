@@ -522,21 +522,26 @@ merge_non_overlap <- function(data) {
 
 ## create_review_list
 ```{r}
-create_review_list <- function(overlap_results, threshold = 0.05) {
+create_review_list <- function(overlap_results, use_threshold = TRUE) {
   # requires dplyr
   metrics <- overlap_results$overlap_metrics
   
   # Get variable mappings
   var_map <- variable_mapping()
   
+  # First, optionally filter the metrics based on use_threshold parameter
+  filtered_metrics <- if(use_threshold) {
+    metrics %>% filter(exceeds_threshold == TRUE)
+  } else {
+    metrics
+  }
+  
   # Add more meaningful grouping and sorting
-  summary <- metrics %>%
+  summary <- filtered_metrics %>%
     # First summarize by fish and variable type
     group_by(fish_id, var_type) %>%
     summarize(
-      has_diffs = any(exceeds_threshold),
       num_overlapping = n(),
-      num_with_diffs = sum(exceeds_threshold),
       # For continuous vars, calculate max difference
       max_relative_diff = if_else(
         first(var_type) == "continuous", 
@@ -548,10 +553,10 @@ create_review_list <- function(overlap_results, threshold = 0.05) {
     # Then create a summary by fish
     group_by(fish_id) %>%
     summarize(
-      continuous_diffs = sum(var_type == "continuous" & has_diffs),
-      count_diffs = sum(var_type == "count" & has_diffs),
-      binary_diffs = sum(var_type == "binary" & has_diffs),
-      total_diffs = sum(has_diffs),
+      continuous_diffs = sum(var_type == "continuous"),
+      count_diffs = sum(var_type == "count"),
+      binary_diffs = sum(var_type == "binary"),  # Should be 0 if use_threshold is TRUE
+      total_diffs = n(),
       max_relative_diff = max(max_relative_diff, na.rm = TRUE),
       .groups = "drop"
     ) %>%
@@ -559,16 +564,16 @@ create_review_list <- function(overlap_results, threshold = 0.05) {
     arrange(desc(total_diffs), desc(continuous_diffs))
   
   # Create a more detailed breakdown by measurement type
-  details <- metrics %>%
-    filter(exceeds_threshold) %>%
+  details <- filtered_metrics %>%
     arrange(fish_id, var_type, desc(relative_diff))
   
   return(list(
     summary = as.data.frame(summary),
-    details = as.data.frame(details)
+    details = as.data.frame(details),
+    filtered_metrics = as.data.frame(filtered_metrics),
+    use_threshold = use_threshold
   ))
 }
-
 ```
 
 ## export_review_list
@@ -811,6 +816,7 @@ review_results <- create_review_list(overlap_results)
 
 export_review_list(review_results, file_prefix = "fish_fossil_review",
                            output_dir = p$`1.data/c.flagged`)
+
 ```
 
 ## Visualize Results
