@@ -812,31 +812,40 @@ write.csv(merged_non_overlap,
 
 ## Flag Conflicting Measurements
 ```{r Flag Duplicates}
-review_results <- create_review_list(overlap_results)
+# Create review list with threshold filtering applied (default)
+review_results <- create_review_list(overlap_results, use_threshold = TRUE)
+
+# Or to see all overlaps without threshold filtering:
+# review_results_all <- create_review_list(overlap_results, use_threshold = FALSE)
 
 export_review_list(review_results, file_prefix = "fish_fossil_review",
-                           output_dir = p$`1.data/c.flagged`)
+                   output_dir = p$`1.data/c.flagged`)
 
 ```
 
 ## Visualize Results
 ```{r}
+# Get the filtered metrics that only include real overlaps
+filtered_metrics <- review_results$filtered_metrics
+
+# Create a suffix for titles based on whether threshold filtering was used
+threshold_text <- if(review_results$use_threshold) " (Exceeding Threshold)" else " (All Overlaps)"
+
 # Visualization 1: Distribution of relative differences
-ggplot(overlap_results$overlap_metrics, aes(x = relative_diff)) +
+ggplot(filtered_metrics, aes(x = relative_diff)) +
   geom_histogram(bins = 30, fill = "skyblue", color = "black") +
   geom_vline(xintercept = 0.05, color = "red", linetype = "dashed") +
-  labs(title = "Distribution of Relative Differences",
+  labs(title = paste0("Distribution of Relative Differences", threshold_text),
        x = "Relative Difference (proportion of scale)",
        y = "Count") +
   theme_minimal()
 
 # Visualization 2: Count of overlaps by measurement type
-overlap_by_measure <- overlap_results$overlap_metrics %>%
+overlap_by_measure <- filtered_metrics %>%
   group_by(measure) %>%
   summarise(
     count = n(),
     avg_diff = mean(relative_diff, na.rm = TRUE),
-    exceed_threshold = sum(exceeds_threshold),
     .groups = "drop"
   )
 
@@ -844,28 +853,29 @@ ggplot(overlap_by_measure, aes(x = reorder(measure, count), y = count)) +
   geom_bar(stat = "identity", fill = "steelblue") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Number of fish with duplicate measurements by type",
+  labs(title = paste0("Number of fish with duplicate measurements by type", threshold_text),
        x = "Measurement",
-       y = "Count of fish with duplicates")
+       y = "Count of fish with duplicates") 
 
 # Visualization 3: Distribution of flags per fish
 ggplot(review_results$summary, aes(x = total_diffs)) +
   geom_histogram(binwidth = 1, fill = "coral") +
   theme_minimal() +
-  labs(title = "Distribution of duplicate measurements per fish",
+  labs(title = paste0("Distribution of duplicate measurements per fish", threshold_text),
        x = "Number of duplicate measurements",
        y = "Count of fish")
 
 # Visualization 4: Distribution of differences by variable type
-ggplot(overlap_results$overlap_metrics, 
+ggplot(filtered_metrics, 
        aes(x = var_type, y = absolute_diff, fill = var_type)) +
   geom_boxplot() +
   scale_fill_brewer(palette = "Set2") +
   theme_minimal() +
-  labs(title = "Distribution of Differences by Variable Type",
+  labs(title = paste0("Distribution of Differences by Variable Type", threshold_text),
        x = "Variable Type", 
        y = "Absolute Difference",
        fill = "Variable Type") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+#==============================================================================#
