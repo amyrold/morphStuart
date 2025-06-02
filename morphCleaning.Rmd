@@ -1035,41 +1035,118 @@ if(sum(!is.na(morph_with_age$CSTRAT)) > 0) {
     print(p3)
   }
 }
-
-# Summary table of specimens by bin with age data
-bin_summary <- morph_with_age %>%
-  group_by(bin) %>%
-  summarise(
-    n_specimens = n(),
-    has_age_data = any(!is.na(CSTRAT)),
-    mean_cstrat = mean(CSTRAT, na.rm = TRUE),
-    mean_year = mean(YEAR, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(n_specimens))
-
-# Show top bins by specimen count
-cat("\nTop 10 bins by specimen count:\n")
-print(head(bin_summary, 10))
 ```
 
-## Handle Flagged Fish with Age Data
-```{r Flagged Fish Age Data}
-# If you also want to add age data to the flagged fish for review
-# Read the flagged fish data
-flagged_fish <- overlap_results$overlap_fish
+## Trait Evolution Over Time Analysis
+```{r Trait Evolution Visualization}
+# Get the continuous variables for trait evolution analysis
+var_map <- variable_mapping()
+continuous_vars <- var_map$continuous
 
-# Add age data to flagged fish as well
-flagged_with_age <- flagged_fish %>%
-  left_join(age_formatted, by = "bin")
+# Prepare data for trait evolution analysis
+trait_evolution_data <- morph_with_age %>%
+  # Only include specimens with age data
+  filter(!is.na(YEAR) & !is.na(CSTRAT)) %>%
+  # Convert to long format for easier plotting
+  pivot_longer(
+    cols = all_of(continuous_vars),
+    names_to = "trait",
+    values_to = "value"
+  ) %>%
+  # Remove rows with missing trait values
+  filter(!is.na(value)) %>%
+  # Calculate sample sizes per trait for reference
+  group_by(trait) %>%
+  mutate(
+    n_specimens = n(),
+    trait_label = paste0(trait, " (n=", n_specimens, ")")
+  ) %>%
+  ungroup()
 
-# Save flagged fish with age data
-write.csv(flagged_with_age,
-          file = paste0(p$`1.data/c.flagged`, "/flagged_fish_with_age.csv"),
-          row.names = FALSE)
+# Basic age distribution of specimens with trait data
+p_age_dist <- ggplot(morph_with_age %>% filter(!is.na(YEAR)), 
+                     aes(x = YEAR)) +
+  geom_histogram(bins = 30, fill = "lightblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Specimens with Age Data",
+       x = "Age (years)",
+       y = "Number of Specimens") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::comma)
 
-cat("\nFlagged fish with age data saved to:", 
-    paste0(p$`1.data/c.flagged`, "/flagged_fish_with_age.csv"))
+print(p_age_dist)
+
+# Multi-panel trait evolution over time (using YEAR)
+if(nrow(trait_evolution_data) > 0) {
+  
+  p_traits_time <- ggplot(trait_evolution_data, aes(x = YEAR, y = value)) +
+    geom_point(alpha = 0.4, size = 0.8) +
+    geom_smooth(method = "loess", se = TRUE, color = "red", size = 0.8) +
+    facet_wrap(~ trait_label, scales = "free_y", ncol = 3) +
+    labs(title = "Morphological Trait Evolution Over Time",
+         x = "Age (years)",
+         y = "Trait Value") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text = element_text(size = 10)
+    ) +
+    scale_x_continuous(labels = scales::comma)
+  
+  print(p_traits_time)
+  
+  # Alternative view: traits over stratigraphic position (CSTRAT)
+  p_traits_strat <- ggplot(trait_evolution_data, aes(x = CSTRAT, y = value)) +
+    geom_point(alpha = 0.4, size = 0.8) +
+    geom_smooth(method = "loess", se = TRUE, color = "blue", size = 0.8) +
+    facet_wrap(~ trait_label, scales = "free_y", ncol = 3) +
+    labs(title = "Morphological Traits Over Stratigraphic Position",
+         x = "Stratigraphic Level (CSTRAT, cm)",
+         y = "Trait Value") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text = element_text(size = 10)
+    )
+  
+  print(p_traits_strat)
+  
+  # Focus on body size (SL) evolution if available
+  sl_data <- trait_evolution_data %>% filter(trait == "SL")
+  
+  if(nrow(sl_data) > 10) {  # Only if we have reasonable sample size
+    p_sl_evolution <- ggplot(sl_data, aes(x = YEAR, y = value)) +
+      geom_point(alpha = 0.6, size = 1.2, color = "darkblue") +
+      geom_smooth(method = "loess", se = TRUE, color = "red", fill = "pink") +
+      labs(title = "Body Size (Standard Length) Evolution Over Time",
+           x = "Age (years)",
+           y = "Standard Length (SL)",
+           caption = paste("n =", nrow(sl_data), "specimens")) +
+      theme_minimal() +
+      scale_x_continuous(labels = scales::comma)
+    
+    print(p_sl_evolution)
+  }
+  
+  # Summary statistics for trait trends
+  trait_trends <- trait_evolution_data %>%
+    group_by(trait) %>%
+    summarise(
+      n_specimens = n(),
+      age_range_years = max(YEAR) - min(YEAR),
+      correlation_with_age = cor(YEAR, value, use = "complete.obs"),
+      mean_value = mean(value),
+      sd_value = sd(value),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(abs(correlation_with_age)))
+  
+  cat("\nTrait correlations with age (strongest correlations first):\n")
+  print(trait_trends)
+  
+} else {
+  cat("No trait evolution data available - check if specimens have both age and trait measurements.\n")
+}
+
 ```
 
 
