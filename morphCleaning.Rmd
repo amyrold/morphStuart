@@ -150,7 +150,7 @@ variable_mapping <- function() {
   count_vars <- c("MDF", "MAF", "MCV", "MAV", "MPT", "MPSP")
   
   binary_vars <- c("MDS1", "MDS2", "MDS3", "MDS1NA", 
-                   "MDS2NA", "MDS3NA", "MPSPNA")
+                   "MDS2NA", "MDS3NA", "MPSPNA", "PGNA")
   
   # Return as a list
   return(list(
@@ -208,12 +208,12 @@ handle_special_cases <- function(data) {
       )
     )
   
-  # When TPGNA column is available, apply similar logic to TPG
-  if ("TPGNA" %in% names(cleaned)) {
+  # When PGNA column is available, apply similar logic to TPG
+  if ("PGNA" %in% names(cleaned)) {
     cleaned <- cleaned %>%
       mutate(
         TPG = case_when(
-          TPGNA == 1 ~ NA_real_,
+          PGNA == 1 ~ NA_real_,
           TRUE ~ TPG
         )
       )
@@ -666,7 +666,7 @@ validate_data <- function(original, corrected, merged, overlaps) {
 # DATA IMPORT
 ```{r}
 # Read in data and check initial structure
-morph <- read.csv(paste0(p$`1.data/a.raw`, "241015_PitLMorph.csv"))
+morph <- read.csv(paste0(p$`1.data/a.raw`, "020625_PitLMorph.csv"))
 # str(morph)
 ```
 
@@ -883,5 +883,43 @@ ggplot(filtered_metrics,
        fill = "Variable Type") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+#==============================================================================#
+
 
 #==============================================================================#
+#SCRAP
+## Creating morph_with_pgna
+```{r PGNA, eval=FALSE, include=FALSE}
+morph <- read.csv(paste0(p$`1.data/a.raw`, "241015_PitLMorph.csv"))
+pgna <- read.csv(paste0(p$`1.data/a.raw`, "PGNA_PitLMorph.csv"))
+
+# First, let's understand the tpgna duplicates
+pgna_summary <- tpgna %>%
+  group_by(ID) %>%
+  summarise(
+    count = n(),
+    unique_values = n_distinct(PGNA),
+    min_pgna = min(PGNA),
+    max_pgna = max(PGNA),
+    .groups = "drop"
+  )
+
+# Check if there are conflicting values within the same ID
+conflicting_pgna <- pgna_summary %>%
+  filter(unique_values > 1)
+
+# Aggregate tpgna (taking max value for binary flags, similar to your other binary vars)
+pgna_agg <- pgna %>%
+  group_by(ID) %>%
+  summarise(
+    PGNA = max(PGNA, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Now join with the aggregated data
+morph_with_pgna <- morph %>%
+  left_join(pgna_agg, by = "ID")
+
+write.csv(morph_with_pgna, file = paste0(p$`1.data/a.raw`, "020625_PitLMorph.csv"))
+
+```
