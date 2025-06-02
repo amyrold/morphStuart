@@ -884,6 +884,194 @@ ggplot(filtered_metrics,
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 #==============================================================================#
+# MERGE AGE ESTIMATES
+## Format Age Data for Merging
+```{r Format Age Data}
+# Read age data (assuming it's already loaded as 'age')
+age <- read.csv(paste0(p$`1.data/a.raw`, "PitLMorph_fieldorder.csv"))
+
+# Convert L..SPEC to match bin formatting
+age_formatted <- age %>%
+  # Convert L..SPEC to character and format as bin
+  mutate(
+    # Handle the column name with dots - use backticks or rename
+    L_SPEC_clean = `L..SPEC`,
+    # Create bin column matching the morph data format: "L" + 4-digit zero-padded number
+    bin = paste0("L", str_pad(as.character(L_SPEC_clean), 4, pad = "0")),
+    # Convert relevant columns to numeric for analysis
+    CSTRAT = as.numeric(CSTRAT),
+    ISTRAT = as.numeric(ISTRAT), 
+    YEAR = as.numeric(YEAR),
+    INT = as.numeric(INT)
+  ) %>%
+  # Select only the columns we need for merging
+  select(bin, CSTRAT, ISTRAT, YEAR, INT) %>%
+  # Remove any rows where bin couldn't be created (NA values in L..SPEC)
+  filter(!is.na(bin), bin != "LNA")
+
+# Check the formatting
+head(age_formatted)
+```
+
+## Merge with Morphological Data
+```{r Merge Age Data}
+# Merge age data with the processed morphological data
+# Assuming you have your merged_non_overlap data from the previous processing
+
+# Read the merged morphological data if not already in memory
+if (!exists("merged_non_overlap")) {
+  merged_non_overlap <- read.csv(paste0(p$`1.data/b.merged`, "/merged_non_overlap.csv"))
+}
+
+# Perform the merge
+morph_with_age <- merged_non_overlap %>%
+  left_join(age_formatted, by = "bin")
+
+# Check merge results
+merge_summary <- morph_with_age %>%
+  summarise(
+    total_specimens = n(),
+    specimens_with_age_data = sum(!is.na(CSTRAT)),
+    specimens_with_istrat = sum(!is.na(ISTRAT)),
+    specimens_with_year = sum(!is.na(YEAR)),
+    specimens_with_int = sum(!is.na(INT)),
+    percent_with_age_data = round(100 * sum(!is.na(CSTRAT)) / n(), 1)
+  )
+
+print("Merge Summary:")
+print(merge_summary)
+
+# Check which bins from morphological data don't have age matches
+missing_age_bins <- morph_with_age %>%
+  filter(is.na(CSTRAT)) %>%
+  select(bin) %>%
+  distinct() %>%
+  pull(bin)
+
+if(length(missing_age_bins) > 0) {
+  cat("\nBins in morphological data without age matches:\n")
+  print(missing_age_bins)
+}
+
+# Check which bins from age data don't have morphological matches
+available_age_bins <- unique(age_formatted$bin)
+used_age_bins <- unique(morph_with_age$bin[!is.na(morph_with_age$CSTRAT)])
+unused_age_bins <- setdiff(available_age_bins, used_age_bins)
+
+if(length(unused_age_bins) > 0) {
+  cat("\nBins in age data without morphological matches:\n")
+  print(head(unused_age_bins, 20))  # Show first 20
+  if(length(unused_age_bins) > 20) {
+    cat("... and", length(unused_age_bins) - 20, "more\n")
+  }
+}
+```
+
+## Save Merged Dataset
+```{r Save Merged Data}
+# Write the merged dataset
+write.csv(morph_with_age, 
+          file = paste0(p$`1.data/b.merged`, "morph_with_age.csv"),
+          row.names = FALSE)
+
+# Create a summary report of the merge
+merge_report <- list(
+  merge_summary = merge_summary,
+  missing_age_bins = missing_age_bins,
+  unused_age_bins = unused_age_bins,
+  total_age_records = nrow(age_formatted),
+  total_morph_records = nrow(merged_non_overlap),
+  final_merged_records = nrow(morph_with_age)
+)
+
+# Save the merge report
+saveRDS(merge_report, file = paste0(p$`3.outputs`, "/age_merge_report.rds"))
+
+cat("\nMerge completed successfully!")
+cat("\nMerged dataset saved to:", paste0(p$`1.data/b.merged`, "/morph_with_age.csv"))
+cat("\nMerge report saved to:", paste0(p$`3.outputs`, "/age_merge_report.rds"))
+```
+
+## Visualization of Age Data Coverage
+```{r Age Data Visualization}
+# Create visualizations to understand the age data coverage
+
+# 1. Distribution of specimens across stratigraphic levels
+if(sum(!is.na(morph_with_age$CSTRAT)) > 0) {
+  
+  p1 <- ggplot(morph_with_age %>% filter(!is.na(CSTRAT)), 
+               aes(x = CSTRAT)) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+    labs(title = "Distribution of Specimens by Stratigraphic Level (CSTRAT)",
+         x = "Stratigraphic Level (cm)",
+         y = "Number of Specimens") +
+    theme_minimal()
+  
+  print(p1)
+  
+  # 2. Age distribution
+  p2 <- ggplot(morph_with_age %>% filter(!is.na(YEAR)), 
+               aes(x = YEAR)) +
+    geom_histogram(bins = 30, fill = "lightgreen", color = "black") +
+    labs(title = "Distribution of Specimens by Age (YEAR)",
+         x = "Age (years)",
+         y = "Number of Specimens") +
+    theme_minimal() +
+    scale_x_continuous(labels = scales::comma)
+  
+  print(p2)
+  
+  # 3. Relationship between CSTRAT and ISTRAT
+  if(sum(!is.na(morph_with_age$ISTRAT)) > 0) {
+    p3 <- ggplot(morph_with_age %>% filter(!is.na(CSTRAT) & !is.na(ISTRAT)), 
+                 aes(x = CSTRAT, y = ISTRAT)) +
+      geom_point(alpha = 0.6) +
+      geom_smooth(method = "lm", se = TRUE, color = "red") +
+      labs(title = "Relationship between CSTRAT and ISTRAT",
+           x = "CSTRAT (cm)",
+           y = "ISTRAT (cm)") +
+      theme_minimal()
+    
+    print(p3)
+  }
+}
+
+# Summary table of specimens by bin with age data
+bin_summary <- morph_with_age %>%
+  group_by(bin) %>%
+  summarise(
+    n_specimens = n(),
+    has_age_data = any(!is.na(CSTRAT)),
+    mean_cstrat = mean(CSTRAT, na.rm = TRUE),
+    mean_year = mean(YEAR, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_specimens))
+
+# Show top bins by specimen count
+cat("\nTop 10 bins by specimen count:\n")
+print(head(bin_summary, 10))
+```
+
+## Handle Flagged Fish with Age Data
+```{r Flagged Fish Age Data}
+# If you also want to add age data to the flagged fish for review
+# Read the flagged fish data
+flagged_fish <- overlap_results$overlap_fish
+
+# Add age data to flagged fish as well
+flagged_with_age <- flagged_fish %>%
+  left_join(age_formatted, by = "bin")
+
+# Save flagged fish with age data
+write.csv(flagged_with_age,
+          file = paste0(p$`1.data/c.flagged`, "/flagged_fish_with_age.csv"),
+          row.names = FALSE)
+
+cat("\nFlagged fish with age data saved to:", 
+    paste0(p$`1.data/c.flagged`, "/flagged_fish_with_age.csv"))
+```
+
 
 
 #==============================================================================#
