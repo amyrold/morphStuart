@@ -34,27 +34,17 @@ library(stringr)
 
 ```
 
-## Global Variables
-```{r Global Variables, include=FALSE}
-# store current user's working directory
-wk.dir <- getwd()
-# Set seed for reproducibility
-set.seed(333)
-
-```
-
 ## Folder Management
-```{r Folder Management, include=FALSE}
-
+```{r}
 # This is a function to initialize a new project
-  # It creates required subfolders (see defaults) 
-  # It outputs an object that stores the relative paths to these sub-folders
+# It creates required subfolders (see defaults) 
+# It outputs an object that stores the relative paths to these sub-folders
 
 # If calling the function within the working directory of the project, project_number = 0
-  # this will create necessary sub-folders in current working directory
+# this will create necessary sub-folders in current working directory
 
 # If creating a new root folder for the project, provide project_number >=1 and a project_name
-  # this will create a folder "pX.project_name/" to store all sub-folders
+# this will create a folder "pX.project_name/" to store all sub-folders
 new_project <- function(project_number, project_name = NULL, subfolders = NULL, wk.dir = getwd()) {
   # Set default subfolders
   default_subfolders <- c("data", "scripts", "output", "docs")
@@ -136,6 +126,28 @@ new_project <- function(project_number, project_name = NULL, subfolders = NULL, 
 p <- new_project(0, subfolders = c("1.data", "1.data/a.raw", "1.data/b.merged",
                                    "1.data/c.flagged","1.data/d.processed", 
                                    "2.scripts", "3.outputs", "4.docs"))
+cat("✓ Project directories initialized\n")
+```
+
+## Source Functions
+```{r Load Validation Scripts, include=FALSE}
+# Source the validation and logging functions
+source(paste0(p$`2.scripts`,"validation_functions.R"))
+source(paste0(p$`2.scripts`,"quality_assessment.R"))
+source(paste0(p$`2.scripts`,"project_validation.R"))
+
+cat("✓ All validation and logging functions loaded\n")
+```
+
+## Global Variables
+```{r Global Variables, include=FALSE}
+# store current user's working directory
+wk.dir <- getwd()
+# Set seed for reproducibility
+set.seed(333)
+
+# Initialize the logging system
+processing_log <- initialize_log("Fish Morphology Data Cleaning Pipeline v2.0")
 ```
 
 #==============================================================================#
@@ -668,6 +680,25 @@ validate_data <- function(original, corrected, merged, overlaps) {
 # Read in data and check initial structure
 morph <- read.csv(paste0(p$`1.data/a.raw`, "020625_PitLMorph.csv"))
 # str(morph)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log, 
+  step_name = "Data Import",
+  input_data = morph,
+  notes = "Initial import of raw morphology data"
+)
+
+# ADD VALIDATION:
+validate_step(
+  morph, 
+  step_name = "Data Import",
+  required_columns = c("n", "ID", "SL", "Scale_10mm"),
+  custom_checks = fish_data_checks[c("count_variable_logic")]  # This check now works without fish_id
+)
+
+# ADD QUALITY ASSESSMENT:
+initial_quality <- create_quality_report(morph, output_dir = paste0(p$`4.docs`, "reports"))
 ```
 
 ## ID Structure Analysis
@@ -675,7 +706,7 @@ morph <- read.csv(paste0(p$`1.data/a.raw`, "020625_PitLMorph.csv"))
 # Extract fish ID and part type
 # ID format: VXXXXXX_LXXXX(A)_1_P/C.jpg or VXXXXXX_LXXXX(A)_1_P2.jpg
 # where VXXXXXX is the specimen ID, LXXXX(A) is the bin/locality, and P/C indicates part/counterpart
-morph <- morph %>%
+morph_with_ids <- morph %>%
   mutate(
     fish_id = str_extract(ID, "^V\\d+"),                          # Extract VXXXXX part at beginning
     bin_raw = str_extract(ID, "L\\d+[A-Za-z]?"),                  # Extract LXXXX with optional letter
@@ -699,22 +730,18 @@ morph <- morph %>%
   ) %>%
   select(-bin_raw, -bin_letter, -bin_number, -bin_suffix, -part_type_raw)  # Remove intermediate columns
 
-# Count rows per fish and part type
-fish_part_counts <- morph %>%
-  group_by(fish_id, part_type) %>%
-  summarise(row_count = n(), .groups = "drop") %>%
-  pivot_wider(names_from = part_type, values_from = row_count, values_fill = 0)
 
-# Check fish without both part types
-missing_parts <- fish_part_counts %>%
-  filter(P == 0 | C == 0)
-sum(missing_parts$`NA`) # fish without both "part" & "counter part"
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "ID Structure Analysis", 
+  input_data = morph,
+  output_data = morph_with_ids,
+  notes = "Extracted fish_id and part_type from ID column"
+)
 
-
-# Fish with excessive rows
-multi_row_fish <- fish_part_counts %>%
-  filter(P > 1 | C > 1)
-length(multi_row_fish$fish_id) # fish with duplicate "parts" or "counter parts"
+# Continue with updated ids
+morph <- morph_with_ids
 ```
 
 ## Basic Quality Check
@@ -771,6 +798,15 @@ morph_with_scales <- morph %>%
 morph_without_scales <- morph %>%
   filter(fish_id %in% fish_missing_scales)
 
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Scale Filtering",
+  input_data = morph,
+  output_data = morph_with_scales,
+  notes = paste("Removed", length(fish_missing_scales), "fish without scale measurements")
+)
+
 # Continue with the fish that have scale measurements
 morph <- morph_with_scales
 
@@ -791,12 +827,29 @@ write.csv(morph_without_scales,
 
 morph_corrected <- handle_special_cases(morph)
 
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Special Cases Handling",
+  input_data = morph_with_scales,
+  output_data = morph_corrected,
+  notes = "Applied spine and girdle logic rules"
+)
+
 ```
 
 ## Overlap Assesment
 ```{r}
 overlap_results <- identify_overlaps(morph_corrected, threshold = 0.05)
 
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Overlap Assessment",
+  input_data = morph_corrected,
+  notes = paste("Identified", length(unique(overlap_results$overlap_fish$fish_id)), 
+                "fish with conflicts")
+)
 # Summarize overlap findings
 cat("Number of fish with overlapping measurements:", 
     length(unique(overlap_results$overlap_metrics$fish_id)), "\n")
@@ -812,8 +865,19 @@ cat("Number of fish without overlaps:",
 merged_non_overlap <- merge_non_overlap(overlap_results$non_overlap_fish)
 
 # Write merged data for Non-Overlapping Fish
-write.csv(merged_non_overlap, 
+merged_file <- write.csv(merged_non_overlap, 
           file = paste0(p$`1.data/b.merged`, "/merged_non_overlap.csv"))
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Merge Non-Overlapping Fish",
+  input_data = overlap_results$non_overlap_fish,
+  output_data = merged_non_overlap,
+  files_created = merged_file,
+  notes = "Merged part and counterpart data"
+)
+
 ```
 
 ## Flag Conflicting Measurements
@@ -826,6 +890,14 @@ review_results <- create_review_list(overlap_results, use_threshold = TRUE)
 
 export_review_list(review_results, file_prefix = "fish_fossil_review",
                    output_dir = p$`1.data/c.flagged`)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Flag Conflicting Measurements",
+  input_data = overlap_results$overlap_fish,
+  notes = paste("Created review lists for", nrow(review_results$summary), "fish")
+)
 
 ```
 
@@ -911,6 +983,8 @@ age_formatted <- age %>%
 
 # Check the formatting
 head(age_formatted)
+
+
 ```
 
 ## Merge with Morphological Data
@@ -926,6 +1000,19 @@ if (!exists("merged_non_overlap")) {
 # Perform the merge
 morph_with_age <- merged_non_overlap %>%
   left_join(age_formatted, by = "bin")
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Age Data Merging",
+  input_data = merged_non_overlap,
+  output_data = morph_with_age,
+  notes = paste("Merged age data for", sum(!is.na(morph_with_age$CSTRAT)), "specimens")
+)
+
+# EXPORT COMPREHENSIVE PROCESSING LOG:
+log_files <- export_log(processing_log, output_dir = paste0(p$`4.docs`, "reports"))
+
 
 # Check merge results
 merge_summary <- morph_with_age %>%
@@ -1037,7 +1124,7 @@ if(sum(!is.na(morph_with_age$CSTRAT)) > 0) {
 }
 ```
 
-## Trait Evolution Over Time Analysis
+## Trait Evolution Over Time
 ```{r Trait Evolution Visualization}
 # Get the continuous variables for trait evolution analysis
 var_map <- variable_mapping()
