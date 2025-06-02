@@ -673,7 +673,7 @@ morph <- read.csv(paste0(p$`1.data/a.raw`, "241015_PitLMorph.csv"))
 ## ID Structure Analysis
 ```{r}
 # Extract fish ID and part type
-# ID format: VXXXXXX_LXXXX(A)_1_P/C.jpg 
+# ID format: VXXXXXX_LXXXX(A)_1_P/C.jpg or VXXXXXX_LXXXX(A)_1_P2.jpg
 # where VXXXXXX is the specimen ID, LXXXX(A) is the bin/locality, and P/C indicates part/counterpart
 morph <- morph %>%
   mutate(
@@ -689,9 +689,15 @@ morph <- morph %>%
       !is.na(bin_number) ~ paste0(bin_letter, str_pad(bin_number, 4, pad = "0")),
       TRUE ~ NA_character_
     ),
-    part_type = str_extract(ID, "[PC](?=\\.jpg$)")               # Extract P or C before .jpg
+    # Extract P or C (with optional numbers) before .jpg, then standardize
+    part_type_raw = str_extract(ID, "[PC]\\d*(?=\\.jpg$)"),      # Extract P, P2, P3, etc. or C before .jpg
+    part_type = case_when(
+      str_starts(part_type_raw, "P") ~ "P",                      # Convert P, P2, P3, etc. to just "P"
+      part_type_raw == "C" ~ "C",                                # Keep C as is
+      TRUE ~ part_type_raw                                       # Preserve any unexpected values
+    )
   ) %>%
-  select(-bin_raw, -bin_letter, -bin_number, -bin_suffix)        # Remove intermediate columns
+  select(-bin_raw, -bin_letter, -bin_number, -bin_suffix, -part_type_raw)  # Remove intermediate columns
 
 # Count rows per fish and part type
 fish_part_counts <- morph %>%
@@ -702,13 +708,13 @@ fish_part_counts <- morph %>%
 # Check fish without both part types
 missing_parts <- fish_part_counts %>%
   filter(P == 0 | C == 0)
-sum(missing_parts$`NA`) # 14 fish without both "part" & "counter part"
+sum(missing_parts$`NA`) # fish without both "part" & "counter part"
+
 
 # Fish with excessive rows
 multi_row_fish <- fish_part_counts %>%
   filter(P > 1 | C > 1)
-length(multi_row_fish$fish_id) # 374 fish with duplicate "parts" or "counter parts"
-
+length(multi_row_fish$fish_id) # fish with duplicate "parts" or "counter parts"
 ```
 
 ## Basic Quality Check
