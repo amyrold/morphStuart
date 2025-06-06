@@ -679,7 +679,7 @@ validate_data <- function(original, corrected, merged, overlaps) {
 ```{r}
 # Read in data and check initial structure
 morph <- read.csv(paste0(p$`1.data/a.raw`, "020625_PitLMorph.csv"))
-# str(morph)
+str(morph)
 
 # ADD LOGGING:
 processing_log <- log_step(
@@ -1235,8 +1235,17 @@ if(nrow(trait_evolution_data) > 0) {
 }
 
 ```
+#==============================================================================#
 
 
+#==============================================================================#
+# PALEO ECO DATABASE
+```{r}
+paleo <- read.csv(paste0(p$`1.data/a.raw`, "050625_paleoeco_seriesL.csv"))
+str(paleo)
+
+
+```
 
 #==============================================================================#
 #SCRAP
@@ -1272,6 +1281,6 @@ pgna_agg <- pgna %>%
 morph_with_pgna <- morph %>%
   left_join(pgna_agg, by = "ID")
 
-write.csv(morph_with_pgna, file = paste0(p$`1.data/a.raw`, "020625_PitLMorph.csv"))
+write.csv(morph_with_pgna, file = paste0(p$`1.data/a.raw`, "020625_PitLMorph.csv"), row.names = FALSE)
 
 ```
