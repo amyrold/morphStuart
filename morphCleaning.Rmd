@@ -32,6 +32,18 @@ library(tidyr)
 if (!require("stringr")) install.packages("stringr")
 library(stringr)
 
+# 5 tibble
+if (!require("tibble")) install.packages("tibble")
+library(tibble)
+
+# 6 rioja
+if (!require("rioja")) install.packages("rioja")
+library(rioja)
+
+# 6 vegan
+if (!require("vegan")) install.packages("vegan")
+library(vegan)
+
 ```
 
 ## Folder Management
@@ -1240,12 +1252,402 @@ if(nrow(trait_evolution_data) > 0) {
 
 #==============================================================================#
 # PALEO ECO DATABASE
+Transform tidy paleo data to rioja-compatible format
 ```{r}
-paleo <- read.csv(paste0(p$`1.data/a.raw`, "050625_paleoeco_seriesL.csv"))
+paleo <- read.csv(paste0(p$`1.data/a.raw`, "060625_paleoeco_seriesL.csv"))
 str(paleo)
+```
 
+
+```{r}
+# FUNCTION 1: Explore your data structure
+explore_paleo <- function(paleo) {
+  cat("=== YOUR PALEO DATA OVERVIEW ===\n")
+  cat("Total rows:", nrow(paleo), "\n")
+  cat("Unique samples:", length(unique(paleo$Sample_ID)), "\n")
+  cat("Microfossil types:", paste(unique(paleo$Microfossil_Type), collapse = ", "), "\n")
+  cat("Date range of samples:", min(paleo$Sample_ID), "to", max(paleo$Sample_ID), "\n")
+  
+  # Check count distribution
+  cat("\nCount summary:\n")
+  print(summary(paleo$Count))
+  
+  # Sample counts by type
+  cat("\nCounts by microfossil type:\n")
+  type_counts <- paleo %>%
+    group_by(Microfossil_Type) %>%
+    summarise(
+      total_specimens = sum(Count),
+      n_samples = n_distinct(Sample_ID),
+      .groups = "drop"
+    )
+  print(type_counts)
+  
+  # Extract and show stratigraphic levels
+  strat_levels <- paleo %>%
+    distinct(Sample_ID) %>%
+    mutate(
+      strat_number = as.numeric(str_extract(Sample_ID, "(?<=L)\\d+"))
+    ) %>%
+    filter(!is.na(strat_number)) %>%
+    arrange(strat_number)
+  
+  cat("\nStratigraphic range: L", min(strat_levels$strat_number), 
+      " to L", max(strat_levels$strat_number), "\n")
+  cat("Number of stratigraphic levels:", nrow(strat_levels), "\n")
+  
+  return(strat_levels)
+}
+
+# FUNCTION 2: Convert your data to rioja format
+convert_to_rioja <- function(paleo, microfossil_type = "Diatom", 
+                           min_total_count = 10, min_samples = 2) {
+  
+  cat("=== CONVERTING TO RIOJA FORMAT ===\n")
+  cat("Focusing on:", microfossil_type, "\n")
+  cat("Minimum total count per taxon:", min_total_count, "\n")
+  cat("Minimum samples per taxon:", min_samples, "\n")
+  
+  # Step 1: Filter to your chosen microfossil type and clean data
+  paleo_clean <- paleo %>%
+    filter(Microfossil_Type == microfossil_type) %>%
+    # Create clean taxon names
+    mutate(
+      # Build taxon identifier from available taxonomy
+      Taxon = case_when(
+        !is.na(Genus_Type) & !is.na(Species) & 
+        Genus_Type != "" & Species != "" ~ paste(Genus_Type, Species, sep = "_"),
+        !is.na(Genus_Type) & Genus_Type != "" ~ paste(Genus_Type, "spp", sep = "_"),
+        !is.na(Morphotype) & Morphotype != "" ~ Morphotype,
+        TRUE ~ "Unknown"
+      ),
+      # Extract stratigraphic level number
+      strat_level = as.numeric(str_extract(Sample_ID, "(?<=L)\\d+"))
+    ) %>%
+    # Remove zero counts and problematic entries
+    filter(Count > 0, !is.na(strat_level), Taxon != "Unknown")
+  
+  # Step 2: Filter out rare taxa
+  common_taxa <- paleo_clean %>%
+    group_by(Taxon) %>%
+    summarise(
+      total_count = sum(Count),
+      n_samples = n_distinct(Sample_ID),
+      .groups = "drop"
+    ) %>%
+    filter(total_count >= min_total_count, n_samples >= min_samples)
+  
+  cat("Started with", length(unique(paleo_clean$Taxon)), "taxa\n")
+  cat("Kept", nrow(common_taxa), "common taxa after filtering\n")
+  
+  # Step 3: Convert to wide format
+  paleo_wide <- paleo_clean %>%
+    filter(Taxon %in% common_taxa$Taxon) %>%
+    # Sum counts if there are duplicates within a sample
+    group_by(Sample_ID, Taxon, strat_level) %>%
+    summarise(Count = sum(Count), .groups = "drop") %>%
+    # Pivot to wide format
+    pivot_wider(
+      names_from = Taxon,
+      values_from = Count,
+      values_fill = 0
+    ) %>%
+    # Sort by stratigraphic level (oldest first)
+    arrange(desc(strat_level))
+  
+  # Step 4: Separate sample info from count data
+  sample_info <- paleo_wide %>%
+    select(Sample_ID, strat_level)
+  
+  count_matrix <- paleo_wide %>%
+    select(-Sample_ID, -strat_level) %>%
+    as.data.frame()
+  
+  # Set row names for rioja
+  rownames(count_matrix) <- sample_info$Sample_ID
+  
+  cat("Final dataset:", nrow(count_matrix), "samples ×", ncol(count_matrix), "taxa\n")
+  
+  # Return everything you need
+  return(list(
+    counts = count_matrix,
+    samples = sample_info,
+    taxa_info = common_taxa,
+    microfossil_type = microfossil_type
+  ))
+}
+
+# FUNCTION 3: Create stratigraphic plot (rioja version)
+create_strat_plot <- function(rioja_data, use_percentages = TRUE, 
+                            plot_title = NULL) {
+  
+  cat("=== CREATING STRATIGRAPHIC PLOT (RIOJA) ===\n")
+  
+  # Prepare data
+  plot_data <- rioja_data$counts
+  depths <- rioja_data$samples$strat_level
+  
+  if (use_percentages) {
+    plot_data <- plot_data / rowSums(plot_data) * 100
+    cat("Using percentages\n")
+  } else {
+    cat("Using raw counts\n")
+  }
+  
+  # Set up plot title
+  if (is.null(plot_title)) {
+    plot_title <- paste(rioja_data$microfossil_type, "Stratigraphy")
+  }
+  
+  # Create the plot with absolute minimal parameters
+  par(mar = c(5, 4, 4, 8))
+  
+  # Try the most basic strat.plot call possible
+  try({
+    strat.plot(plot_data, yvar = depths)
+    title(main = plot_title)
+  }, silent = FALSE)
+  
+  cat("Plot created successfully!\n")
+  return(plot_data)
+}
+
+# FUNCTION 3B: Create proper stratigraphic plot (ggplot version)
+create_proper_strat_plot <- function(rioja_data, use_percentages = TRUE, 
+                                   plot_title = NULL) {
+  
+  cat("=== CREATING PROPER STRATIGRAPHIC PLOT (GGPLOT) ===\n")
+  
+  plot_data <- rioja_data$counts
+  samples <- rioja_data$samples
+  
+  if (use_percentages) {
+    plot_data <- plot_data / rowSums(plot_data) * 100
+    cat("Using percentages\n")
+  } else {
+    cat("Using raw counts\n")
+  }
+  
+  # Set up plot title
+  if (is.null(plot_title)) {
+    plot_title <- paste(rioja_data$microfossil_type, "Stratigraphy")
+  }
+  
+  # Convert to long format
+  plot_long <- plot_data %>%
+    bind_cols(samples) %>%
+    pivot_longer(cols = -c(Sample_ID, strat_level), 
+                 names_to = "Taxon", values_to = "Abundance")
+  
+  # Create taxon positions for side-by-side layout
+  taxa_order <- names(plot_data)
+  plot_long$taxon_position <- match(plot_long$Taxon, taxa_order)
+  
+  # Calculate scaled abundance for plotting (each taxon gets equal width)
+  plot_long <- plot_long %>%
+    group_by(Taxon) %>%
+    mutate(
+      max_abundance = max(Abundance, na.rm = TRUE),
+      scaled_abundance = if_else(max_abundance > 0, Abundance / max_abundance * 0.8, 0),
+      x_start = taxon_position - 0.4,
+      x_end = taxon_position - 0.4 + scaled_abundance
+    ) %>%
+    ungroup()
+  
+  # Create the stratigraphic plot
+  p <- ggplot(plot_long) +
+    # Add the abundance curves
+    geom_ribbon(aes(xmin = x_start, xmax = x_end, y = strat_level, group = Taxon),
+                fill = "lightblue", color = "black", alpha = 0.7, size = 0.3) +
+    # Add vertical lines at each taxon position
+    geom_vline(xintercept = 1:length(taxa_order) - 0.4, 
+               color = "gray50", linetype = "dashed", alpha = 0.5) +
+    # Customize axes
+    scale_x_continuous(
+      breaks = 1:length(taxa_order),
+      labels = taxa_order,
+      expand = c(0.02, 0)
+    ) +
+    scale_y_continuous(expand = c(0.01, 0)) +
+    # Labels and theme
+    labs(
+      title = plot_title,
+      x = "Taxa",
+      y = "Stratigraphic Level",
+      caption = if(use_percentages) "Abundance shown as % of total" else "Abundance (counts)"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+      axis.text.y = element_text(size = 9),
+      plot.title = element_text(size = 12, hjust = 0.5),
+      panel.grid.minor = element_blank(),
+      panel.grid.major.x = element_blank()
+    )
+  
+  print(p)
+  cat("Proper stratigraphic plot created!\n")
+  return(p)
+}
+
+# FUNCTION 4: Calculate diversity metrics
+calculate_diversity <- function(rioja_data) {
+  
+  cat("=== CALCULATING DIVERSITY METRICS ===\n")
+  
+  counts <- rioja_data$counts
+  samples <- rioja_data$samples
+  
+  diversity_data <- data.frame(
+    Sample_ID = samples$Sample_ID,
+    strat_level = samples$strat_level,
+    richness = apply(counts > 0, 1, sum),        # Number of taxa
+    total_count = rowSums(counts),               # Total specimens
+    shannon = diversity(counts, index = "shannon"),  # Shannon diversity
+    simpson = diversity(counts, index = "simpson")   # Simpson diversity
+  ) %>%
+    arrange(desc(strat_level))  # Oldest first
+  
+  cat("Diversity calculated for", nrow(diversity_data), "samples\n")
+  return(diversity_data)
+}
+
+# FUNCTION 5: Plot diversity trends
+plot_diversity <- function(diversity_data, metric = "shannon") {
+  
+  cat("=== PLOTTING DIVERSITY TRENDS ===\n")
+  
+  if (metric == "shannon") {
+    p <- ggplot(diversity_data, aes(x = shannon, y = strat_level)) +
+      labs(x = "Shannon Diversity", title = "Shannon Diversity Through Section")
+  } else if (metric == "richness") {
+    p <- ggplot(diversity_data, aes(x = richness, y = strat_level)) +
+      labs(x = "Species Richness", title = "Species Richness Through Section")
+  } else if (metric == "total_count") {
+    p <- ggplot(diversity_data, aes(x = total_count, y = strat_level)) +
+      labs(x = "Total Count", title = "Total Specimen Count Through Section")
+  }
+  
+  p <- p +
+    geom_line(color = "blue") +
+    geom_point(size = 2, color = "darkblue") +
+    labs(y = "Stratigraphic Level") +
+    theme_minimal() +
+    theme(axis.text = element_text(size = 10))
+  
+  print(p)
+  return(p)
+}
 
 ```
+
+```{r}
+create_simple_plot <- function(rioja_data, use_percentages = TRUE) {
+  
+  plot_data <- rioja_data$counts
+  samples <- rioja_data$samples
+  
+  if (use_percentages) {
+    plot_data <- plot_data / rowSums(plot_data) * 100
+  }
+  
+  # Convert to long format for ggplot
+  plot_long <- plot_data %>%
+    bind_cols(samples) %>%
+    pivot_longer(cols = -c(Sample_ID, strat_level), 
+                 names_to = "Taxon", values_to = "Abundance") %>%
+    filter(Abundance > 0)  # Only show non-zero values
+  
+  # Create the plot
+  p <- ggplot(plot_long, aes(x = Abundance, y = strat_level)) +
+    geom_area(fill = "lightblue", alpha = 0.7) +
+    facet_wrap(~ Taxon, scales = "free_x") +
+    labs(y = "Stratigraphic Level", 
+         x = if(use_percentages) "Percentage" else "Count",
+         title = paste(rioja_data$microfossil_type, "Stratigraphy")) +
+    theme_minimal() +
+    theme(strip.text = element_text(size = 8))
+  
+  print(p)
+  return(p)
+}
+
+# FUNCTION 3: Create stratigraphic plot
+create_strat_plot <- function(rioja_data, use_percentages = TRUE, 
+                            plot_title = NULL) {
+  
+  cat("=== CREATING STRATIGRAPHIC PLOT ===\n")
+  
+  # Prepare data
+  plot_data <- rioja_data$counts
+  depths <- rioja_data$samples$strat_level
+  
+  if (use_percentages) {
+    plot_data <- plot_data / rowSums(plot_data) * 100
+    cat("Using percentages\n")
+  } else {
+    cat("Using raw counts\n")
+  }
+  
+  # Set up plot title
+  if (is.null(plot_title)) {
+    plot_title <- paste(rioja_data$microfossil_type, "Stratigraphy")
+  }
+  
+  # Create the plot with simplified parameters
+  par(mar = c(5, 4, 4, 8))  # Adjust margins
+  
+  # Use basic strat.plot with minimal parameters to avoid conflicts
+  strat.plot(
+    plot_data,
+    yvar = depths,
+    scale.percent = use_percentages,
+    plot.poly = TRUE,
+    col.poly = "lightblue",
+    main = plot_title,
+    ylab = "Stratigraphic Level"
+  )
+  
+  cat("Plot created successfully!\n")
+  return(plot_data)
+}
+
+```
+
+```{r}
+# STEP 2: Explore the data
+strat_info <- explore_paleo(paleo)
+
+# STEP 3: Convert to rioja format (start with diatoms)
+rioja_data <- convert_to_rioja(paleo,
+                              microfossil_type = "Diatom",
+                              min_total_count = 10,
+                              min_samples = 2)
+
+# STEP 4: Create stratigraphic plot
+strat_plot_data <- create_strat_plot(rioja_data)
+
+# OR if that fails, use the ggplot version
+proper_strat_plot <- create_proper_strat_plot(rioja_data, use_percentages = TRUE)
+
+# STEP 5: Calculate and plot diversity
+diversity_metrics <- calculate_diversity(rioja_data)
+plot_diversity(diversity_metrics, metric = "shannon")
+plot_diversity(diversity_metrics, metric = "richness")
+
+# STEP 6: Save your results
+write.csv(rioja_data$counts, "diatom_counts_wide.csv", row.names = TRUE)
+write.csv(strat_plot_data, "diatom_percentages.csv", row.names = TRUE)
+write.csv(diversity_metrics, "diversity_metrics.csv", row.names = FALSE)
+
+```
+
+
+
+
+
+
+
 
 #==============================================================================#
 #SCRAP
