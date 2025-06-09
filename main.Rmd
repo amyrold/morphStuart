@@ -1,0 +1,1019 @@
+---
+title: "morphStuart"
+author: "Aaron Myrold"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+#==============================================================================#
+# PROJECT INTRODUCTION
+
+#==============================================================================#
+# SETUP
+## Loading Libraries
+```{r Libraries, include=FALSE}
+# load libraries needed for our analyses
+# 1 ggplot2
+if (!require("ggplot2")) install.packages("ggplot2")
+library(ggplot2)
+
+# 2 dplyr
+if (!require("dplyr")) install.packages("dplyr")
+library(dplyr)
+
+# 3 tidyr
+if (!require("tidyr")) install.packages("tidyr")
+library(tidyr)
+
+# 4 stringr
+if (!require("stringr")) install.packages("stringr")
+library(stringr)
+
+# 5 tibble
+if (!require("tibble")) install.packages("tibble")
+library(tibble)
+
+# 6 rioja
+if (!require("rioja")) install.packages("rioja")
+library(rioja)
+
+# 7 vegan
+if (!require("vegan")) install.packages("vegan")
+library(vegan)
+
+# 8 purrr
+if (!require("purrr")) install.packages("purrr")
+library(purrr)
+
+```
+
+## Folder Management
+```{r}
+# This is a function to initialize a new project
+# It creates required subfolders (see defaults) 
+# It outputs an object that stores the relative paths to these sub-folders
+
+# If calling the function within the working directory of the project, project_number = 0
+# this will create necessary sub-folders in current working directory
+
+# If creating a new root folder for the project, provide project_number >=1 and a project_name
+# this will create a folder "pX.project_name/" to store all sub-folders
+new_project <- function(project_number, project_name = NULL, subfolders = NULL, wk.dir = getwd()) {
+  # Set default subfolders
+  default_subfolders <- c("data", "scripts", "output", "docs")
+  
+  # Use provided sub-folders or defaults if none are provided
+  if (is.null(subfolders)) {
+    subfolders <- default_subfolders
+  }
+  
+  # Initialize project paths list
+  project_paths <- list()
+  
+  # Check if this is a "root directory" project (project_number = 0)
+  is_root_project <- project_number == 0
+  
+  if (is_root_project) {
+    # Use working directory as the base path for root projects
+    base_path <- wk.dir
+    project_paths$main <- wk.dir
+    message("Creating folders directly in working directory: ", wk.dir)
+  } else {
+    # For normal projects, validate project name is provided
+    if (is.null(project_name)) {
+      stop("Project name is required when project_number is not 0")
+    }
+    
+    # Create project folder name
+    project_folder <- paste0("p", project_number, ".", project_name)
+    
+    # Full path for the project folder
+    project_path <- file.path(wk.dir, project_folder)
+    
+    # Create the project folder if it doesn't exist
+    if (!file.exists(project_path)) {
+      dir.create(project_path)
+      message("Created project folder: ", project_path)
+    } else {
+      message("Project folder already exists: ", project_path)
+    }
+    
+    # Set base path for subfolders
+    base_path <- project_path
+    project_paths$main <- project_path
+  }
+  
+  # Create sub-folders
+  for (sub in subfolders) {
+    # Determine subfolder name based on project type
+    if (is_root_project) {
+      subfolder_name <- sub
+    } else {
+      subfolder_name <- paste0("p", project_number, ".", sub)
+    }
+    
+    # Full path for the subfolder
+    subfolder_path <- file.path(base_path, subfolder_name)
+    
+    # Create sub-folder if it doesn't exist
+    if (!file.exists(subfolder_path)) {
+      dir.create(subfolder_path, recursive = TRUE)  # Added recursive=TRUE for nested paths
+      message("Created subfolder: ", subfolder_path)
+    } else {
+      message("Subfolder already exists: ", subfolder_path)
+    }
+    
+    # Add the sub-folder path to the list
+    project_paths[[sub]] <- paste0(subfolder_path, "/")
+  }
+  
+  # Return the list of paths as an object
+  return(project_paths)
+}
+
+```
+
+## Initialize Directories
+```{r}
+# Initialize new project directories
+p <- new_project(0, subfolders = c("1.data", "1.data/a.raw", "1.data/b.merged",
+                                   "1.data/c.flagged","1.data/d.processed", 
+                                   "2.scripts", "3.outputs", "4.docs"))
+cat("✓ Project directories initialized\n")
+```
+
+## Source Functions
+```{r Load Validation Scripts, include=FALSE}
+# Source the validation and logging functions
+source(paste0(p$`2.scripts`,"validation_functions.R"))
+source(paste0(p$`2.scripts`,"quality_assessment.R"))
+source(paste0(p$`2.scripts`,"project_validation.R"))
+
+cat("✓ All validation and logging functions loaded\n")
+```
+
+## Global Variables
+```{r Global Variables, include=FALSE}
+# store current user's working directory
+wk.dir <- getwd()
+# Set seed for reproducibility
+set.seed(333)
+
+# Initialize the logging system
+processing_log <- initialize_log("Fish Morphology Data Cleaning Pipeline v2.0")
+```
+
+#==============================================================================#
+# DATA IMPORT
+```{r}
+# Source cleaning functions
+source(paste0(p$`2.scripts`, "morph_cleaning.R"))
+# Read in data and check initial structure
+morph <- read.csv(paste0(p$`1.data/a.raw`, "020625_PitLMorph.csv"))
+#str(morph)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log, 
+  step_name = "Data Import",
+  input_data = morph,
+  notes = "Initial import of raw morphology data"
+)
+
+# ADD VALIDATION:
+validate_step(
+  morph, 
+  step_name = "Data Import",
+  required_columns = c("n", "ID", "SL", "Scale_10mm"),
+  custom_checks = fish_data_checks[c("count_variable_logic")]  # This check now works without fish_id
+)
+
+# ADD QUALITY ASSESSMENT:
+initial_quality <- create_quality_report(morph, output_dir = paste0(p$`4.docs`, "reports"))
+```
+
+## ID Structure Analysis
+```{r}
+# Extract fish ID and part type
+# ID format: VXXXXXX_LXXXX(A)_1_P/C.jpg or VXXXXXX_LXXXX(A)_1_P2.jpg
+# where VXXXXXX is the specimen ID, LXXXX(A) is the bin/locality, and P/C indicates part/counterpart
+morph_with_ids <- morph %>%
+  mutate(
+    fish_id = str_extract(ID, "^V\\d+"),                          # Extract VXXXXX part at beginning
+    bin_raw = str_extract(ID, "L\\d+[A-Za-z]?"),                  # Extract LXXXX with optional letter
+    # Split bin into letter prefix, number, and suffix
+    bin_letter = str_extract(bin_raw, "^L"),
+    bin_number = str_extract(bin_raw, "\\d+"),
+    bin_suffix = str_extract(bin_raw, "[A-Za-z]$"),
+    # Create standardized bin with zero padding
+    bin = case_when(
+      !is.na(bin_suffix) ~ paste0(bin_letter, str_pad(bin_number, 4, pad = "0"), bin_suffix),
+      !is.na(bin_number) ~ paste0(bin_letter, str_pad(bin_number, 4, pad = "0")),
+      TRUE ~ NA_character_
+    ),
+    # Extract P or C (with optional numbers) before .jpg, then standardize
+    part_type_raw = str_extract(ID, "[PC]\\d*(?=\\.jpg$)"),      # Extract P, P2, P3, etc. or C before .jpg
+    part_type = case_when(
+      str_starts(part_type_raw, "P") ~ "P",                      # Convert P, P2, P3, etc. to just "P"
+      part_type_raw == "C" ~ "C",                                # Keep C as is
+      TRUE ~ part_type_raw                                       # Preserve any unexpected values
+    )
+  ) %>%
+  select(-bin_raw, -bin_letter, -bin_number, -bin_suffix, -part_type_raw)  # Remove intermediate columns
+
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "ID Structure Analysis", 
+  input_data = morph,
+  output_data = morph_with_ids,
+  notes = "Extracted fish_id and part_type from ID column"
+)
+
+# Continue with updated ids
+morph <- morph_with_ids
+```
+
+## Basic Quality Check
+```{r}
+# Check for implausible values in measurement columns
+length_cols <- c("SL", "CAV", "DS1", "DS2", "DS3", "LPT", "PSP.L", "PSP.R", "TPG", "ECT", "CLE", "PMX")
+
+# Check for negative values in length columns
+negative_lengths <- morph %>%
+  select(ID, all_of(length_cols)) %>%
+  pivot_longer(cols = -ID, names_to = "measure", values_to = "value") %>%
+  filter(value < 0)
+length(negative_lengths$ID) # No negative measurements
+
+```
+
+## Flag missing Scale_10mm
+```{r}
+# Check for missing scale information
+scale_summary <- morph %>%
+  group_by(fish_id) %>%
+  summarize(
+    has_part_scale = any(!is.na(Scale_10mm[part_type == "P"])),
+    has_cpart_scale = any(!is.na(Scale_10mm[part_type == "C"])),
+    has_any_scale = has_part_scale | has_cpart_scale,
+    .groups = "drop"
+  )
+
+# Get list of fish IDs missing scales
+fish_missing_scales <- scale_summary %>%
+  filter(!has_any_scale) %>%
+  pull(fish_id)
+
+# Create report of fish missing scale information
+missing_scales_detail <- morph %>%
+  filter(fish_id %in% fish_missing_scales) %>%
+  select(fish_id, ID, part_type, Scale_10mm) %>%
+  arrange(fish_id, part_type)
+
+# Write the detailed report
+write.csv(missing_scales_detail, 
+          file = paste0(p$`1.data/c.flagged`, "/fish_missing_scales_detailed.csv"), 
+          row.names = FALSE)
+
+# Print summary of scale check
+cat("Fish without any scale information:", 
+    sum(!scale_summary$has_any_scale), 
+    "out of", nrow(scale_summary), "\n")
+
+# Split the dataset
+morph_with_scales <- morph %>%
+  filter(!fish_id %in% fish_missing_scales)
+
+morph_without_scales <- morph %>%
+  filter(fish_id %in% fish_missing_scales)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Scale Filtering",
+  input_data = morph,
+  output_data = morph_with_scales,
+  notes = paste("Removed", length(fish_missing_scales), "fish without scale measurements")
+)
+
+# Continue with the fish that have scale measurements
+morph <- morph_with_scales
+
+# Write the datasets to separate files for reference
+write.csv(morph_with_scales, 
+          file = paste0(p$`1.data/a.raw`, "/fish_with_scales.csv"), 
+          row.names = FALSE)
+
+write.csv(morph_without_scales, 
+          file = paste0(p$`1.data/c.flagged`, "/fish_without_scales.csv"), 
+          row.names = FALSE)
+```
+
+#==============================================================================#
+# DATA PREPROCESSING
+## Handle Special Cases
+```{r Spine and Girdle Logic}
+
+morph_corrected <- handle_special_cases(morph)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Special Cases Handling",
+  input_data = morph_with_scales,
+  output_data = morph_corrected,
+  notes = "Applied spine and girdle logic rules"
+)
+
+```
+
+## Overlap Assesment
+```{r}
+overlap_results <- identify_overlaps(morph_corrected, threshold = 0.05)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Overlap Assessment",
+  input_data = morph_corrected,
+  notes = paste("Identified", length(unique(overlap_results$overlap_fish$fish_id)), 
+                "fish with conflicts")
+)
+# Summarize overlap findings
+cat("Number of fish with overlapping measurements:", 
+    length(unique(overlap_results$overlap_metrics$fish_id)), "\n")
+cat("Number of fish without overlaps:", 
+    length(unique(overlap_results$non_overlap_fish$fish_id)), "\n")
+
+```
+
+#==============================================================================#
+# DATA CLEANING
+## Merge Non-Overlapping Fish
+```{r}
+merged_non_overlap <- merge_non_overlap(overlap_results$non_overlap_fish)
+
+# Write merged data for Non-Overlapping Fish
+merged_file <- write.csv(merged_non_overlap, 
+          file = paste0(p$`1.data/b.merged`, "/merged_non_overlap.csv"))
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Merge Non-Overlapping Fish",
+  input_data = overlap_results$non_overlap_fish,
+  output_data = merged_non_overlap,
+  files_created = merged_file,
+  notes = "Merged part and counterpart data"
+)
+
+```
+
+## Flag Conflicting Measurements
+```{r Flag Duplicates}
+# Create review list with threshold filtering applied (default)
+review_results <- create_review_list(overlap_results, use_threshold = TRUE)
+
+# Or to see all overlaps without threshold filtering:
+# review_results_all <- create_review_list(overlap_results, use_threshold = FALSE)
+
+export_review_list(review_results, file_prefix = "fish_fossil_review",
+                   output_dir = p$`1.data/c.flagged`)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Flag Conflicting Measurements",
+  input_data = overlap_results$overlap_fish,
+  notes = paste("Created review lists for", nrow(review_results$summary), "fish")
+)
+
+```
+
+## Visualize Results
+```{r}
+# Get the filtered metrics that only include real overlaps
+filtered_metrics <- review_results$filtered_metrics
+
+# Create a suffix for titles based on whether threshold filtering was used
+threshold_text <- if(review_results$use_threshold) " (Exceeding Threshold)" else " (All Overlaps)"
+
+# Visualization 1: Distribution of relative differences
+p1 <-ggplot(filtered_metrics, aes(x = relative_diff)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  geom_vline(xintercept = 0.05, color = "red", linetype = "dashed") +
+  labs(title = paste0("Distribution of Relative Differences", threshold_text),
+       x = "Relative Difference (proportion of scale)",
+       y = "Count") +
+  theme_minimal()
+ggsave(paste0(p$`3.outputs`, "/overlap_relative_differences.svg"), p1, width = 10, height = 6)
+
+# Visualization 2: Count of overlaps by measurement type
+overlap_by_measure <- filtered_metrics %>%
+  group_by(measure) %>%
+  summarise(
+    count = n(),
+    avg_diff = mean(relative_diff, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+p2 <- ggplot(overlap_by_measure, aes(x = reorder(measure, count), y = count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = paste0("Number of fish with duplicate measurements by type", threshold_text),
+       x = "Measurement",
+       y = "Count of fish with duplicates") 
+ggsave(paste0(p$`3.outputs`, "/overlaps_by_measure.svg"), p2, width = 10, height = 6)
+
+# Visualization 3: Distribution of flags per fish
+p3 <- ggplot(review_results$summary, aes(x = total_diffs)) +
+  geom_histogram(binwidth = 1, fill = "coral") +
+  theme_minimal() +
+  labs(title = paste0("Distribution of duplicate measurements per fish", threshold_text),
+       x = "Number of duplicate measurements",
+       y = "Count of fish")
+ggsave(paste0(p$`3.outputs`, "/duplicates_per_fish.svg"), p3, width = 8, height = 6)
+
+# Visualization 4: Distribution of differences by variable type
+p4 <- ggplot(filtered_metrics, 
+       aes(x = var_type, y = absolute_diff, fill = var_type)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Set2") +
+  theme_minimal() +
+  labs(title = paste0("Distribution of Differences by Variable Type", threshold_text),
+       x = "Variable Type", 
+       y = "Absolute Difference",
+       fill = "Variable Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(paste0(p$`3.outputs`, "/differences_by_variable_type.svg"), p4, width = 10, height = 6)
+```
+#==============================================================================#
+# MERGE AGE ESTIMATES
+## Format Age Data for Merging
+```{r Format Age Data}
+# Read age data (assuming it's already loaded as 'age')
+age <- read.csv(paste0(p$`1.data/a.raw`, "PitLMorph_fieldorder.csv"))
+
+# Convert L..SPEC to match bin formatting
+age_formatted <- age %>%
+  # Convert L..SPEC to character and format as bin
+  mutate(
+    # Handle the column name with dots - use backticks or rename
+    L_SPEC_clean = `L..SPEC`,
+    # Create bin column matching the morph data format: "L" + 4-digit zero-padded number
+    bin = paste0("L", str_pad(as.character(L_SPEC_clean), 4, pad = "0")),
+    # Convert relevant columns to numeric for analysis
+    CSTRAT = as.numeric(CSTRAT),
+    ISTRAT = as.numeric(ISTRAT), 
+    YEAR = as.numeric(YEAR),
+    INT = as.numeric(INT)
+  ) %>%
+  # Select only the columns we need for merging
+  select(bin, CSTRAT, ISTRAT, YEAR, INT) %>%
+  # Remove any rows where bin couldn't be created (NA values in L..SPEC)
+  filter(!is.na(bin), bin != "LNA")
+
+# Check the formatting
+head(age_formatted)
+
+
+```
+
+## Merge with Morphological Data
+```{r Merge Age Data}
+# Merge age data with the processed morphological data
+# Assuming you have your merged_non_overlap data from the previous processing
+
+# Read the merged morphological data if not already in memory
+if (!exists("merged_non_overlap")) {
+  merged_non_overlap <- read.csv(paste0(p$`1.data/b.merged`, "/merged_non_overlap.csv"))
+}
+
+# Perform the merge
+morph_with_age <- merged_non_overlap %>%
+  left_join(age_formatted, by = "bin")
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Age Data Merging",
+  input_data = merged_non_overlap,
+  output_data = morph_with_age,
+  notes = paste("Merged age data for", sum(!is.na(morph_with_age$CSTRAT)), "specimens")
+)
+
+# EXPORT COMPREHENSIVE PROCESSING LOG:
+log_files <- export_log(processing_log, output_dir = paste0(p$`4.docs`, "reports"))
+
+
+# Check merge results
+merge_summary <- morph_with_age %>%
+  summarise(
+    total_specimens = n(),
+    specimens_with_age_data = sum(!is.na(CSTRAT)),
+    specimens_with_istrat = sum(!is.na(ISTRAT)),
+    specimens_with_year = sum(!is.na(YEAR)),
+    specimens_with_int = sum(!is.na(INT)),
+    percent_with_age_data = round(100 * sum(!is.na(CSTRAT)) / n(), 1)
+  )
+
+print("Merge Summary:")
+print(merge_summary)
+
+# Check which bins from morphological data don't have age matches
+missing_age_bins <- morph_with_age %>%
+  filter(is.na(CSTRAT)) %>%
+  select(bin) %>%
+  distinct() %>%
+  pull(bin)
+
+if(length(missing_age_bins) > 0) {
+  cat("\nBins in morphological data without age matches:\n")
+  print(missing_age_bins)
+}
+
+# Check which bins from age data don't have morphological matches
+available_age_bins <- unique(age_formatted$bin)
+used_age_bins <- unique(morph_with_age$bin[!is.na(morph_with_age$CSTRAT)])
+unused_age_bins <- setdiff(available_age_bins, used_age_bins)
+
+if(length(unused_age_bins) > 0) {
+  cat("\nBins in age data without morphological matches:\n")
+  print(head(unused_age_bins, 20))  # Show first 20
+  if(length(unused_age_bins) > 20) {
+    cat("... and", length(unused_age_bins) - 20, "more\n")
+  }
+}
+```
+
+## Save Merged Dataset
+```{r Save Merged Data}
+# Write the merged dataset
+write.csv(morph_with_age, 
+          file = paste0(p$`1.data/b.merged`, "morph_with_age.csv"),
+          row.names = FALSE)
+
+# Create a summary report of the merge
+merge_report <- list(
+  merge_summary = merge_summary,
+  missing_age_bins = missing_age_bins,
+  unused_age_bins = unused_age_bins,
+  total_age_records = nrow(age_formatted),
+  total_morph_records = nrow(merged_non_overlap),
+  final_merged_records = nrow(morph_with_age)
+)
+
+# Save the merge report
+saveRDS(merge_report, file = paste0(p$`3.outputs`, "/age_merge_report.rds"))
+
+cat("\nMerge completed successfully!")
+cat("\nMerged dataset saved to:", paste0(p$`1.data/b.merged`, "/morph_with_age.csv"))
+cat("\nMerge report saved to:", paste0(p$`3.outputs`, "/age_merge_report.rds"))
+```
+
+## Visualization of Age Data Coverage
+```{r Age Data Visualization}
+# Create visualizations to understand the age data coverage
+
+# 1. Distribution of specimens across stratigraphic levels
+if(sum(!is.na(morph_with_age$CSTRAT)) > 0) {
+  
+  p1 <- ggplot(morph_with_age %>% filter(!is.na(CSTRAT)), 
+               aes(x = CSTRAT)) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+    labs(title = "Distribution of Specimens by Stratigraphic Level (CSTRAT)",
+         x = "Stratigraphic Level (cm)",
+         y = "Number of Specimens") +
+    theme_minimal()
+  
+  print(p1)
+  ggsave(paste0(p$`3.outputs`, "specimens_by_strat_level.svg"), p1, width = 8, height = 6)
+  
+  # 2. Age distribution
+  p2 <- ggplot(morph_with_age %>% filter(!is.na(YEAR)), 
+               aes(x = YEAR)) +
+    geom_histogram(bins = 30, fill = "lightgreen", color = "black") +
+    labs(title = "Distribution of Specimens by Age (YEAR)",
+         x = "Age (years)",
+         y = "Number of Specimens") +
+    theme_minimal() +
+    scale_x_continuous(labels = scales::comma)
+  
+  print(p2)
+  ggsave(paste0(p$`3.outputs`, "specimens_by_age.svg"), p2, width = 8, height = 6)
+
+  
+  # 3. Relationship between CSTRAT and ISTRAT
+  if(sum(!is.na(morph_with_age$ISTRAT)) > 0) {
+    p3 <- ggplot(morph_with_age %>% filter(!is.na(CSTRAT) & !is.na(ISTRAT)), 
+                 aes(x = CSTRAT, y = ISTRAT)) +
+      geom_point(alpha = 0.6) +
+      geom_smooth(method = "lm", se = TRUE, color = "red") +
+      labs(title = "Relationship between CSTRAT and ISTRAT",
+           x = "CSTRAT (cm)",
+           y = "ISTRAT (cm)") +
+      theme_minimal()
+    
+    print(p3)
+    ggsave(paste0(p$`3.outputs`, "cstrat_vs_istrat.svg"), p3, width = 8, height = 6)
+  }
+}
+```
+
+## Trait Evolution Over Time
+```{r Trait Evolution Visualization}
+# Get the continuous variables for trait evolution analysis
+var_map <- variable_mapping()
+continuous_vars <- var_map$continuous
+
+# Prepare data for trait evolution analysis
+trait_evolution_data <- morph_with_age %>%
+  # Only include specimens with age data
+  filter(!is.na(YEAR) & !is.na(CSTRAT)) %>%
+  # Convert to long format for easier plotting
+  pivot_longer(
+    cols = all_of(continuous_vars),
+    names_to = "trait",
+    values_to = "value"
+  ) %>%
+  # Remove rows with missing trait values
+  filter(!is.na(value)) %>%
+  # Calculate sample sizes per trait for reference
+  group_by(trait) %>%
+  mutate(
+    n_specimens = n(),
+    trait_label = paste0(trait, " (n=", n_specimens, ")")
+  ) %>%
+  ungroup()
+
+# Basic age distribution of specimens with trait data
+p_age_dist <- ggplot(morph_with_age %>% filter(!is.na(YEAR)), 
+                     aes(x = YEAR)) +
+  geom_histogram(bins = 30, fill = "lightblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Specimens with Age Data",
+       x = "Age (years)",
+       y = "Number of Specimens") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::comma)
+
+print(p_age_dist)
+
+# Multi-panel trait evolution over time (using YEAR)
+if(nrow(trait_evolution_data) > 0) {
+  
+  p_traits_time <- ggplot(trait_evolution_data, aes(x = YEAR, y = value)) +
+    geom_point(alpha = 0.4, size = 0.8) +
+    geom_smooth(method = "loess", se = TRUE, color = "red", size = 0.8) +
+    facet_wrap(~ trait_label, scales = "free_y", ncol = 3) +
+    labs(title = "Morphological Trait Evolution Over Time",
+         x = "Age (years)",
+         y = "Trait Value") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text = element_text(size = 10)
+    ) +
+    scale_x_continuous(labels = scales::comma)
+  
+  print(p_traits_time)
+  
+  # Alternative view: traits over stratigraphic position (CSTRAT)
+  p_traits_strat <- ggplot(trait_evolution_data, aes(x = CSTRAT, y = value)) +
+    geom_point(alpha = 0.4, size = 0.8) +
+    geom_smooth(method = "loess", se = TRUE, color = "blue", size = 0.8) +
+    facet_wrap(~ trait_label, scales = "free_y", ncol = 3) +
+    labs(title = "Morphological Traits Over Stratigraphic Position",
+         x = "Stratigraphic Level (CSTRAT, cm)",
+         y = "Trait Value") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text = element_text(size = 10)
+    )
+  
+  print(p_traits_strat)
+  
+  # Focus on body size (SL) evolution if available
+  sl_data <- trait_evolution_data %>% filter(trait == "SL")
+  
+  if(nrow(sl_data) > 10) {  # Only if we have reasonable sample size
+    p_sl_evolution <- ggplot(sl_data, aes(x = YEAR, y = value)) +
+      geom_point(alpha = 0.6, size = 1.2, color = "darkblue") +
+      geom_smooth(method = "loess", se = TRUE, color = "red", fill = "pink") +
+      labs(title = "Body Size (Standard Length) Evolution Over Time",
+           x = "Age (years)",
+           y = "Standard Length (SL)",
+           caption = paste("n =", nrow(sl_data), "specimens")) +
+      theme_minimal() +
+      scale_x_continuous(labels = scales::comma)
+    
+    print(p_sl_evolution)
+  }
+  
+  # Summary statistics for trait trends
+  trait_trends <- trait_evolution_data %>%
+    group_by(trait) %>%
+    summarise(
+      n_specimens = n(),
+      age_range_years = max(YEAR) - min(YEAR),
+      correlation_with_age = cor(YEAR, value, use = "complete.obs"),
+      mean_value = mean(value),
+      sd_value = sd(value),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(abs(correlation_with_age)))
+  
+  cat("\nTrait correlations with age (strongest correlations first):\n")
+  print(trait_trends)
+  
+} else {
+  cat("No trait evolution data available - check if specimens have both age and trait measurements.\n")
+}
+
+ggsave(paste0(p$`3.outputs`, "age_distribution.svg"), p_age_dist, width = 8, height = 6)
+ggsave(paste0(p$`3.outputs`, "traits_over_time.svg"), p_traits_time, width = 12, height = 8)
+ggsave(paste0(p$`3.outputs`, "traits_over_strat.svg"), p_traits_strat, width = 12, height = 8)
+if(exists("p_sl_evolution")) ggsave(paste0(p$`3.outputs`, "body_size_evolution.svg"), p_sl_evolution, width = 8, height = 6)
+```
+#==============================================================================#
+
+# PALEO-ECOLOGICAL DATA PROCESSING
+## Data Import
+```{r}
+# Load paleoeco cleaning functions
+source(paste0(p$`2.scripts`, "paleoeco_cleaning.R"))
+# Read paleo-ecological data
+paleo <- read.csv(paste0(p$`1.data/a.raw`, "060625_paleoeco_seriesL.csv"))
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log, 
+  step_name = "Paleo Data Import",
+  input_data = paleo,
+  notes = "Initial import of paleo-ecological microfossil data"
+)
+
+# Basic structure check
+cat("Paleo data structure:\n")
+cat("Total rows:", nrow(paleo), "\n")
+cat("Unique samples:", length(unique(paleo$Sample_ID)), "\n")
+cat("Microfossil types:", paste(unique(paleo$Microfossil_Type), collapse = ", "), "\n")
+```
+
+## Extract Sample Metadata
+```{r}
+# Extract and standardize sample metadata
+paleo_metadata <- extract_paleo_metadata(paleo)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Paleo Metadata Extraction",
+  input_data = paleo,
+  output_data = paleo_metadata,
+  notes = "Extracted V-numbers, bins, and sample types for data linking"
+)
+
+# Quick quality check
+metadata_summary <- paleo_metadata %>%
+  summarise(
+    samples_with_v_numbers = sum(!is.na(V_number)),
+    samples_with_bins = sum(!is.na(bin)),
+    killifish_samples = sum(sample_type == "Killifish"),
+    stickleback_samples = sum(sample_type == "Stickleback")
+  )
+
+print(metadata_summary)
+```
+
+## Merge Microscopy Counts
+```{r}
+# Handle multiple microscopy line counts per sample (Jacopo's requirement)
+merged_diatom_counts <- merge_microscopy_counts(paleo, microfossil_type = "Diatom")
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Microscopy Count Merging",
+  input_data = paleo,
+  output_data = merged_diatom_counts,
+  notes = "Merged multiple microscopy line counts per geological sample"
+)
+```
+
+## Standardize Taxonomy
+```{r}
+# Apply Jacopo's taxonomic preferences (morphotype-level for diatoms)
+standardized_taxonomy <- standardize_taxonomy(merged_diatom_counts, microfossil_type = "Diatom")
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Taxonomic Standardization",
+  input_data = merged_diatom_counts,
+  output_data = standardized_taxonomy$data,
+  notes = "Standardized to morphotype-level taxonomy per Jacopo's specifications"
+)
+
+# Export taxa list for Jacopo's ecological review
+write.csv(standardized_taxonomy$taxonomy_summary, 
+          file = paste0(p$`1.data/c.flagged`, "/diatom_taxa_for_jacopo_review.csv"),
+          row.names = FALSE)
+```
+
+## Integrate Age Data
+```{r}
+# Link paleo samples with age/depth data from morphology dataset
+paleo_with_ages <- integrate_age_data(paleo_metadata, morph_with_age)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Age Data Integration",
+  input_data = paleo_metadata,
+  output_data = paleo_with_ages$data,
+  notes = paste("Integrated age data for", paleo_with_ages$integration_summary$samples_with_age, 
+                "out of", paleo_with_ages$integration_summary$total_samples, "samples")
+)
+
+# Validation check for age integration
+if(paleo_with_ages$integration_summary$samples_with_age == 0) {
+  warning("No samples successfully linked with age data - check bin formatting")
+}
+```
+
+## Create Rioja Matrix
+```{r}
+# Convert to rioja-compatible format
+rioja_diatoms <- create_rioja_matrix(
+  taxonomic_data = standardized_taxonomy,
+  metadata_with_ages = paleo_with_ages,
+  min_total_count = 0,  # Include all taxa initially per Jacopo's request
+  min_samples = 1,
+  include_killifish = TRUE
+)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Rioja Matrix Creation",
+  input_data = standardized_taxonomy$data,
+  output_data = rioja_diatoms$counts,
+  notes = paste("Created", nrow(rioja_diatoms$counts), "×", ncol(rioja_diatoms$counts), 
+                "matrix for stratigraphic analysis")
+)
+```
+
+## Validate Processing
+```{r}
+# Comprehensive validation matching morphology pipeline style
+paleo_validation <- validate_paleo_data(paleo, rioja_diatoms, 
+                                       list(metadata = paleo_metadata,
+                                            merged_counts = merged_diatom_counts,
+                                            taxonomy = standardized_taxonomy,
+                                            ages = paleo_with_ages))
+
+# ADD VALIDATION (FIXED CUSTOM CHECKS):
+validate_step(
+  rioja_diatoms$counts, 
+  step_name = "Paleo Matrix Validation",
+  custom_checks = list(
+    matrix_completeness = function(data) {
+      list(
+        passed = all(rowSums(data) > 0),
+        message = "All samples have at least one taxon count"
+      )
+    },
+    sample_ordering = function(data) {
+      samples_with_strat <- rioja_diatoms$samples %>% filter(!is.na(strat_level))
+      list(
+        passed = nrow(samples_with_strat) > 0,
+        message = paste("Stratigraphic ordering available for", nrow(samples_with_strat), "samples")
+      )
+    }
+  )
+)
+```
+
+## Rioja Stratigraphic Analysis and Plots
+```{r Rioja Stratigraphic Plots}
+# If the above still causes issues, try this more conservative approach
+if(rioja_diatoms$has_age_data) {
+  
+  # Prepare data as before
+  count_matrix <- rioja_diatoms$counts
+  sample_info <- rioja_diatoms$samples
+  depth_var <- sample_info$CSTRAT
+  
+  valid_samples <- !is.na(depth_var)
+  plot_matrix <- count_matrix[valid_samples, ]
+  plot_depths <- depth_var[valid_samples]
+  
+  # Simple stratigraphic plot without clustering first
+  svg(paste0(p$`3.outputs`, "simple_diatom_diagram.svg"), 
+      width = 12, height = 8)
+  
+  # Minimal parameters to avoid conflicts
+  strat.plot(
+    plot_matrix[, 1:min(11, ncol(plot_matrix))],  # Limit to 8 taxa
+    yvar = plot_depths,
+    y.rev = TRUE,
+    scale.percent = TRUE
+  )
+  
+  dev.off()
+  
+  # Add clustering in separate step if the simple plot works
+  if(nrow(plot_matrix) > 3) {
+    diss <- dist(sqrt(plot_matrix/rowSums(plot_matrix)))
+    clust <- chclust(diss, method = "coniss")
+    
+    svg(paste0(p$`3.outputs`, "diatom_with_clustering.svg"), 
+        width = 14, height = 10)
+    
+    strat_plot <- strat.plot(
+      plot_matrix[, 1:min(10, ncol(plot_matrix))],
+      yvar = plot_depths,
+      y.rev = TRUE,
+      scale.percent = TRUE,
+      clust = clust
+    )
+    
+    dev.off()
+  }
+  
+  cat("Alternative plots created successfully!\n")
+}
+```
+
+## Export Results
+```{r}
+# Export in format requested by Jacopo
+exported_files <- export_paleo_results(rioja_diatoms, 
+                                       output_prefix = "diatom_analysis",
+                                       output_dir = p$`1.data/b.merged`)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Paleo Results Export",
+  input_data = rioja_diatoms$counts,  # Add this required parameter
+  files_created = exported_files,
+  notes = "Exported summary tables and taxa lists for ecological grouping"
+)
+
+cat("Paleo-ecological data processing complete!\n")
+cat("Files ready for Jacopo's ecological grouping review.\n")
+```
+
+## Quality Assessment Report
+```{r}
+# Create quality report matching morphology pipeline
+paleo_quality <- create_quality_report(rioja_diatoms$counts, 
+                                       output_dir = paste0(p$`4.docs`, "reports"))
+
+# Summary visualization
+if(rioja_diatoms$has_age_data) {
+  # Sample distribution through time
+  p_sample_dist <- ggplot(rioja_diatoms$samples %>% filter(!is.na(CSTRAT)), 
+                         aes(x = CSTRAT, fill = sample_type)) +
+    geom_histogram(bins = 20, alpha = 0.7) +
+    labs(title = "Sample Distribution Through Stratigraphic Section",
+         x = "Stratigraphic Depth (cm)", y = "Number of Samples") +
+    theme_minimal()
+  
+  print(p_sample_dist)
+}
+
+# Taxa abundance distribution
+p_taxa_abundance <- rioja_diatoms$counts %>%
+  colSums() %>%
+  data.frame(abundance = .) %>%
+  rownames_to_column("taxon") %>%
+  arrange(desc(abundance)) %>%
+  slice_head(n = 20) %>%
+  ggplot(aes(x = reorder(taxon, abundance), y = abundance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 20 Diatom Taxa by Abundance",
+       x = "Taxon", y = "Total Count") +
+  theme_minimal()
+
+print(p_taxa_abundance)
+
+ggsave(paste0(p$`3.outputs`, "paleo_sample_distribution.svg"), p_sample_dist, width = 8, height = 6)
+ggsave(paste0(p$`3.outputs`, "top_taxa_abundance.svg"), p_taxa_abundance, width = 10, height = 8)
+```
+
+
+
+
+
+
+

@@ -1,0 +1,12 @@
+"Taxon","total_abundance","n_samples","max_abundance","percent_of_total","rank","cumulative_percent"
+"Unknown_Fragment",19868,59,940,58.78,1,58.8
+"Centric",8613,59,942,25.48,2,84.3
+"Pennates",1897,7,601,5.61,3,89.9
+"Asymmetric_Biraphid",917,58,80,2.71,4,92.6
+"Symmetric_Biraphid",760,54,65,2.25,5,94.8
+"Araphid",743,54,60,2.2,6,97
+"Eunotioid",446,49,66,1.32,7,98.3
+"Surirelloid",264,28,40,0.78,8,99.1
+"Epithemioid",147,28,28,0.43,9,99.6
+"Monoraphid",136,16,30,0.4,10,100
+"Nitzschioid",8,6,2,0.02,11,100
