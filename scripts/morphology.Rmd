@@ -7,15 +7,16 @@ output: html_document
 
 #==============================================================================#
 # SETUP
-```{r setup, include=FALSE}
-# Set working directory to root
+```{r setup}
 knitr::opts_knit$set(root.dir = dirname(getwd()))
-
-# Source project setup and run config
-source("src/project_setup.R")
-setup_project('config.yaml')
 ```
 
+```{r source}
+# Source project setup and run config
+source("src/project_setup.R")
+setup_project('config.yaml', force_reload = TRUE)
+
+```
 #==============================================================================#
 # DATA IMPORT
 ```{r}
@@ -41,8 +42,6 @@ validate_step(
   custom_checks = fish_data_checks[c("count_variable_logic")]  # This check now works without fish_id
 )
 
-# ADD QUALITY ASSESSMENT:
-initial_quality <- create_quality_report(morph, output_dir = p$docs.logs)
 ```
 
 ## ID Structure Analysis

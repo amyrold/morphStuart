@@ -7,10 +7,11 @@ output: html_document
 
 #==============================================================================#
 # SETUP
-```{r setup, include=FALSE}
-# Set working directory to root
+```{r setup}
 knitr::opts_knit$set(root.dir = dirname(getwd()))
+```
 
+```{r source}
 # Source project setup and run config
 source("src/project_setup.R")
 setup_project('config.yaml')

@@ -106,24 +106,24 @@ logging:
   enabled: true
   log_level: "INFO"
   auto_export: true
-  output_dir: "4.docs/logs"
+  output_dir: "docs/logs"
 
 # Data file specifications (for validation)
 data_files:
   required:
     - name: "020625_PitLMorph.csv"
-      location: "1.data/a.raw"
+      location: "data/raw"
       description: "Fish morphology measurements from objectJ"
     - name: "060625_paleoeco_seriesL.csv" 
-      location: "1.data/a.raw"
+      location: "data/raw"
       description: "Paleo-ecological microfossil counts"
     - name: "PitLMorph_fieldorder.csv"
-      location: "1.data/a.raw"
+      location: "data/raw"
       description: "Age and depth estimates"
   
   optional:
     - name: "additional_specimens.csv"
-      location: "1.data/a.raw"
+      location: "data/raw"
       description: "Supplementary morphology data"
 
 # Analysis configurations

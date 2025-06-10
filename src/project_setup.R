@@ -7,8 +7,8 @@
 # modifying setup code.
 # 
 # Usage: 
-#   source("2.scripts/project_setup.R")
-#   setup_project("project_config.yaml")
+#   source("src/project_setup.R")
+#   setup_project("config.yaml")
 #   
 # Or for reloading:
 #   reload_project()
@@ -30,7 +30,7 @@
 #' 
 #' @param config_file Path to YAML configuration file
 #' @return List containing parsed configuration
-load_project_config <- function(config_file = "project_config.yaml") {
+load_project_config <- function(config_file = "config.yaml") {
   
   # Check if yaml package is available
   if (!requireNamespace("yaml", quietly = TRUE)) {
@@ -353,7 +353,7 @@ initialize_logging_from_config <- function(logging_config, project_config) {
 #' @param config_file Path to YAML configuration file
 #' @param force_reload Force reload even if already set up
 #' @return List containing setup results and project objects
-setup_project <- function(config_file = "project_config.yaml", force_reload = FALSE) {
+setup_project <- function(config_file = "config.yaml", force_reload = FALSE) {
   
   # Check if already set up (unless forcing reload)
   if (!force_reload && exists(".PROJECT_SETUP_COMPLETE", envir = .PROJECT_STATE)) {
@@ -387,7 +387,7 @@ setup_project <- function(config_file = "project_config.yaml", force_reload = FA
     }
     
     # 5. Load functions
-    scripts_path <- folder_paths$`2.scripts`
+    scripts_path <- folder_paths$`src`
     if (!is.null(scripts_path) && !is.null(config$functions)) {
       function_results <- load_functions_from_config(config$functions, scripts_path)
       setup_results$functions <- function_results
