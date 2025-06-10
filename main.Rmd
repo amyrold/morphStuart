@@ -199,19 +199,19 @@ initial_quality <- create_quality_report(morph, output_dir = paste0(p$`4.docs`, 
 ```{r}
 # Extract fish ID and part type
 # ID format: VXXXXXX_LXXXX(A)_1_P/C.jpg or VXXXXXX_LXXXX(A)_1_P2.jpg
-# where VXXXXXX is the specimen ID, LXXXX(A) is the bin/locality, and P/C indicates part/counterpart
+# where VXXXXXX is the specimen ID, LXXXX(A) is the LSPEC/locality, and P/C indicates part/counterpart
 morph_with_ids <- morph %>%
   mutate(
     fish_id = str_extract(ID, "^V\\d+"),                          # Extract VXXXXX part at beginning
-    bin_raw = str_extract(ID, "L\\d+[A-Za-z]?"),                  # Extract LXXXX with optional letter
-    # Split bin into letter prefix, number, and suffix
-    bin_letter = str_extract(bin_raw, "^L"),
-    bin_number = str_extract(bin_raw, "\\d+"),
-    bin_suffix = str_extract(bin_raw, "[A-Za-z]$"),
-    # Create standardized bin with zero padding
-    bin = case_when(
-      !is.na(bin_suffix) ~ paste0(bin_letter, str_pad(bin_number, 4, pad = "0"), bin_suffix),
-      !is.na(bin_number) ~ paste0(bin_letter, str_pad(bin_number, 4, pad = "0")),
+    LSPEC_raw = str_extract(ID, "L\\d+[A-Za-z]?"),                  # Extract LXXXX with optional letter
+    # Split LSPEC into letter prefix, number, and suffix
+    LSPEC_letter = str_extract(LSPEC_raw, "^L"),
+    LSPEC_number = str_extract(LSPEC_raw, "\\d+"),
+    LSPEC_suffix = str_extract(LSPEC_raw, "[A-Za-z]$"),
+    # Create standardized LSPEC with zero padding
+    LSPEC = case_when(
+      !is.na(LSPEC_suffix) ~ paste0(LSPEC_letter, str_pad(LSPEC_number, 4, pad = "0"), LSPEC_suffix),
+      !is.na(LSPEC_number) ~ paste0(LSPEC_letter, str_pad(LSPEC_number, 4, pad = "0")),
       TRUE ~ NA_character_
     ),
     # Extract P or C (with optional numbers) before .jpg, then standardize
@@ -222,7 +222,7 @@ morph_with_ids <- morph %>%
       TRUE ~ part_type_raw                                       # Preserve any unexpected values
     )
   ) %>%
-  select(-bin_raw, -bin_letter, -bin_number, -bin_suffix, -part_type_raw)  # Remove intermediate columns
+  select(-LSPEC_raw, -LSPEC_letter, -LSPEC_number, -LSPEC_suffix, -part_type_raw)  # Remove intermediate columns
 
 
 # ADD LOGGING:
@@ -467,7 +467,7 @@ age_formatted <- age %>%
     # Handle the column name with dots - use backticks or rename
     L_SPEC_clean = `L..SPEC`,
     # Create bin column matching the morph data format: "L" + 4-digit zero-padded number
-    bin = paste0("L", str_pad(as.character(L_SPEC_clean), 4, pad = "0")),
+    LSPEC = paste0("L", str_pad(as.character(L_SPEC_clean), 4, pad = "0")),
     # Convert relevant columns to numeric for analysis
     CSTRAT = as.numeric(CSTRAT),
     ISTRAT = as.numeric(ISTRAT), 
@@ -475,9 +475,9 @@ age_formatted <- age %>%
     INT = as.numeric(INT)
   ) %>%
   # Select only the columns we need for merging
-  select(bin, CSTRAT, ISTRAT, YEAR, INT) %>%
+  select(LSPEC, CSTRAT, ISTRAT, YEAR, INT) %>%
   # Remove any rows where bin couldn't be created (NA values in L..SPEC)
-  filter(!is.na(bin), bin != "LNA")
+  filter(!is.na(LSPEC), LSPEC != "LNA")
 
 # Check the formatting
 head(age_formatted)
@@ -497,7 +497,7 @@ if (!exists("merged_non_overlap")) {
 
 # Perform the merge
 morph_with_age <- merged_non_overlap %>%
-  left_join(age_formatted, by = "bin")
+  left_join(age_formatted, by = "LSPEC")
 
 # ADD LOGGING:
 processing_log <- log_step(
@@ -526,28 +526,28 @@ merge_summary <- morph_with_age %>%
 print("Merge Summary:")
 print(merge_summary)
 
-# Check which bins from morphological data don't have age matches
-missing_age_bins <- morph_with_age %>%
+# Check which LSPECs from morphological data don't have age matches
+missing_age_LSPEC <- morph_with_age %>%
   filter(is.na(CSTRAT)) %>%
-  select(bin) %>%
+  select(LSPEC) %>%
   distinct() %>%
-  pull(bin)
+  pull(LSPEC)
 
-if(length(missing_age_bins) > 0) {
-  cat("\nBins in morphological data without age matches:\n")
-  print(missing_age_bins)
+if(length(missing_age_LSPEC) > 0) {
+  cat("\nLSPECs in morphological data without age matches:\n")
+  print(missing_age_LSPEC)
 }
 
-# Check which bins from age data don't have morphological matches
-available_age_bins <- unique(age_formatted$bin)
-used_age_bins <- unique(morph_with_age$bin[!is.na(morph_with_age$CSTRAT)])
-unused_age_bins <- setdiff(available_age_bins, used_age_bins)
+# Check which LSPECs from age data don't have morphological matches
+available_age_LSPECs <- unique(age_formatted$LSPEC)
+used_age_LSPECs <- unique(morph_with_age$LSPEC[!is.na(morph_with_age$CSTRAT)])
+unused_age_LSPECs <- setdiff(available_age_LSPECs, used_age_LSPECs)
 
-if(length(unused_age_bins) > 0) {
-  cat("\nBins in age data without morphological matches:\n")
-  print(head(unused_age_bins, 20))  # Show first 20
-  if(length(unused_age_bins) > 20) {
-    cat("... and", length(unused_age_bins) - 20, "more\n")
+if(length(unused_age_LSPECs) > 0) {
+  cat("\nLSPECs in age data without morphological matches:\n")
+  print(head(unused_age_LSPECs, 20))  # Show first 20
+  if(length(unused_age_LSPECs) > 20) {
+    cat("... and", length(unused_age_LSPECs) - 20, "more\n")
   }
 }
 ```
@@ -562,8 +562,8 @@ write.csv(morph_with_age,
 # Create a summary report of the merge
 merge_report <- list(
   merge_summary = merge_summary,
-  missing_age_bins = missing_age_bins,
-  unused_age_bins = unused_age_bins,
+  missing_age_LSPECs = missing_age_LSPEC,
+  unused_age_LSPECs = unused_age_LSPECs,
   total_age_records = nrow(age_formatted),
   total_morph_records = nrow(merged_non_overlap),
   final_merged_records = nrow(morph_with_age)
@@ -741,9 +741,9 @@ ggsave(paste0(p$`3.outputs`, "traits_over_time.svg"), p_traits_time, width = 12,
 ggsave(paste0(p$`3.outputs`, "traits_over_strat.svg"), p_traits_strat, width = 12, height = 8)
 if(exists("p_sl_evolution")) ggsave(paste0(p$`3.outputs`, "body_size_evolution.svg"), p_sl_evolution, width = 8, height = 6)
 ```
-#==============================================================================#
 
-# PALEO-ECOLOGICAL DATA PROCESSING
+#==============================================================================#
+# PALEO-ECOLOGICAL DATA 
 ## Data Import
 ```{r}
 # Load paleoeco cleaning functions
@@ -784,7 +784,7 @@ processing_log <- log_step(
 metadata_summary <- paleo_metadata %>%
   summarise(
     samples_with_v_numbers = sum(!is.na(V_number)),
-    samples_with_bins = sum(!is.na(bin)),
+    samples_with_LSPEC = sum(!is.na(LSPEC)),
     killifish_samples = sum(sample_type == "Killifish"),
     stickleback_samples = sum(sample_type == "Stickleback")
   )

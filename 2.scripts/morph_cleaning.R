@@ -313,7 +313,7 @@ merge_non_overlap <- function(data) {
   var_map <- variable_mapping()
   
   # Define column types
-  id_cols <- c("n", "ID", "fish_id", "part_type", "bin")
+  id_cols <- c("n", "ID", "fish_id", "part_type", "LSPEC")
   measure_cols <- setdiff(names(data), id_cols)
   
   # Get unique fish for processing

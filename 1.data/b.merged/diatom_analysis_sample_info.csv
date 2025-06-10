@@ -1,4 +1,4 @@
-"Sample_ID","strat_level","sample_type","sample_label","V_number","bin","CSTRAT","YEAR","has_age_data","age_quality","notes"
+"Sample_ID","strat_level","sample_type","sample_label","V_number","LSPEC","CSTRAT","YEAR","has_age_data","age_quality","notes"
 "V330400_L0040",40,"Stickleback","L0040","V330400","L0040",NA,NA,FALSE,"No age data","Missing age/depth data"
 "V330455_L0095",95,"Stickleback","L0095","V330455","L0095",NA,NA,FALSE,"No age data","Missing age/depth data"
 "V330470_L110",110,"Stickleback","L110","V330470","L0110",NA,NA,FALSE,"No age data","Missing age/depth data"

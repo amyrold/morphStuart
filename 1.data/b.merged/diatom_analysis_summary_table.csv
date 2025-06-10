@@ -1,4 +1,4 @@
-"Sample_ID","V_number","bin","sample_type","CSTRAT","YEAR","Unknown_Fragment","Centric","Pennates","Asymmetric_Biraphid","Symmetric_Biraphid","Araphid","Eunotioid","Surirelloid","Epithemioid","Monoraphid","Nitzschioid"
+"Sample_ID","V_number","LSPEC","sample_type","CSTRAT","YEAR","Unknown_Fragment","Centric","Pennates","Asymmetric_Biraphid","Symmetric_Biraphid","Araphid","Eunotioid","Surirelloid","Epithemioid","Monoraphid","Nitzschioid"
 "V333671_L3515","V333671","L3515","Stickleback",659.7,4271.917,224,38,0,9,1,11,8,1,0,0,0
 "V333620_L3464","V333620","L3464","Stickleback",656.6,4372.304,149,7,0,4,2,2,6,2,0,0,0
 "V333509_L3351","V333509","L3351","Stickleback",651.55,4535.838,167,34,0,3,6,3,4,0,0,0,0

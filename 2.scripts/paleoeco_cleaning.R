@@ -39,12 +39,12 @@ if (!require("vegan", quietly = TRUE)) {
 #'
 #' Extracts sample metadata from Sample_ID strings and classifies samples as
 #' killifish (post-stickleback, LXXXX) or stickleback (L + digits). Creates
-#' standardized bin formatting to match morphology data for age integration.
+#' standardized LSPEC formatting to match morphology data for age integration.
 #'
 #' @param paleo Data frame containing paleo-ecological data with Sample_ID column
 #' @return Data frame with extracted metadata columns:
 #'   - V_number: Specimen identifier for linking with morphology data
-#'   - bin: Standardized format (L + 4-digit) for age/depth lookup
+#'   - LSPEC: Standardized format (L + 4-digit) for age/depth lookup
 #'   - sample_type: "Killifish" or "Stickleback" classification
 #'   - strat_level: Temporary stratigraphic ordering (updated by age integration)
 #'   - sample_label: Human-readable sample names for plots
@@ -69,13 +69,13 @@ extract_paleo_metadata <- function(paleo) {
       # Extract V-number for linking with morph data
       V_number = str_extract(Sample_ID, "V\\d+"),
       
-      # Extract L-number (field excavation number) and format as bin
+      # Extract L-number (field excavation number) and format as LSPEC
       L_number_raw = str_extract(Sample_ID, "L\\w+"),
       L_digits = str_extract(Sample_ID, "(?<=L)\\d+"),
       
-      # Create standardized bin format to match morph data
+      # Create standardized LSPEC format to match morph data
       # This is critical for age/depth integration
-      bin = case_when(
+      LSPEC = case_when(
         !is.na(L_digits) ~ paste0("L", str_pad(L_digits, 4, pad = "0")),
         str_detect(Sample_ID, "LXXXX") ~ "LXXXX",  # Killifish samples
         TRUE ~ L_number_raw
@@ -102,7 +102,7 @@ extract_paleo_metadata <- function(paleo) {
         TRUE ~ Sample_ID
       )
     ) %>%
-    select(Sample_ID, V_number, bin, L_number_raw, sample_type, strat_level, sample_label)
+    select(Sample_ID, V_number, LSPEC, L_number_raw, sample_type, strat_level, sample_label)
   
   # Summary output
   cat("Extracted metadata for", nrow(paleo_with_metadata), "unique samples\n")
@@ -293,7 +293,7 @@ standardize_taxonomy <- function(merged_counts, microfossil_type = "Diatom") {
 #' Integrate Age and Depth Data from Morphology Dataset
 #'
 #' Links paleo samples to actual stratigraphic depths (CSTRAT) and ages (YEAR)
-#' using Mike Bell's estimates via bin matching. This replaces temporary 
+#' using Mike Bell's estimates via LSPEC matching. This replaces temporary 
 #' L-number ordering with real stratigraphic positions.
 #'
 #' @param paleo_metadata Output from extract_paleo_metadata()
@@ -308,8 +308,8 @@ integrate_age_data <- function(paleo_metadata, morph_with_age) {
   if (!is.data.frame(paleo_metadata) || !is.data.frame(morph_with_age)) {
     stop("Both inputs must be data frames")
   }
-  if (!"bin" %in% names(paleo_metadata)) {
-    stop("paleo_metadata must contain 'bin' column from extract_paleo_metadata()")
+  if (!"LSPEC" %in% names(paleo_metadata)) {
+    stop("paleo_metadata must contain 'LSPEC' column from extract_paleo_metadata()")
   }
   if (!any(c("CSTRAT", "YEAR") %in% names(morph_with_age))) {
     stop("morph_with_age must contain 'CSTRAT' and/or 'YEAR' columns")
@@ -318,11 +318,11 @@ integrate_age_data <- function(paleo_metadata, morph_with_age) {
   cat("=== INTEGRATING AGE/DEPTH DATA ===\n")
   cat("Using Mike Bell's age estimates from morphology dataset\n")
   
-  # Extract age/depth reference data by bin
+  # Extract age/depth reference data by LSPEC
   # Average multiple specimens from same stratigraphic level
   age_reference <- morph_with_age %>%
-    filter(!is.na(bin), !is.na(CSTRAT) | !is.na(YEAR)) %>%
-    group_by(bin) %>%
+    filter(!is.na(LSPEC), !is.na(CSTRAT) | !is.na(YEAR)) %>%
+    group_by(LSPEC) %>%
     summarise(
       CSTRAT = mean(CSTRAT, na.rm = TRUE),
       YEAR = mean(YEAR, na.rm = TRUE),
@@ -338,7 +338,7 @@ integrate_age_data <- function(paleo_metadata, morph_with_age) {
   
   # Join paleo metadata with age data
   paleo_with_ages <- paleo_metadata %>%
-    left_join(age_reference, by = "bin", suffix = c("", "_morph")) %>%
+    left_join(age_reference, by = "LSPEC", suffix = c("", "_morph")) %>%
     mutate(
       # Update stratigraphic levels with real data when available
       strat_level_updated = case_when(
@@ -376,14 +376,14 @@ integrate_age_data <- function(paleo_metadata, morph_with_age) {
   cat("  - With YEAR age:", integration_summary$samples_with_year, "\n")
   
   # Check for potential linking issues
-  missing_age_bins <- paleo_with_ages %>%
+  missing_age_LSPECs <- paleo_with_ages %>%
     filter(!has_age_data, sample_type == "Stickleback") %>%
-    select(bin) %>%
+    select(LSPEC) %>%
     distinct()
   
-  if (nrow(missing_age_bins) > 0) {
-    cat("WARNING:", nrow(missing_age_bins), "stickleback bins without age data\n")
-    cat("Missing bins:", paste(missing_age_bins$bin, collapse = ", "), "\n")
+  if (nrow(missing_age_LSPECs) > 0) {
+    cat("WARNING:", nrow(missing_age_LSPECs), "stickleback LSPECs without age data\n")
+    cat("Missing LSPECs:", paste(missing_age_LSPECs$LSPEC, collapse = ", "), "\n")
   }
   
   return(list(
@@ -455,7 +455,7 @@ create_rioja_matrix <- function(taxonomic_data, metadata_with_ages,
     inner_join(samples_to_include, by = "Sample_ID") %>%
     # Final aggregation step to handle any remaining duplicates
     group_by(Sample_ID, Taxon, strat_level_updated, sample_type, sample_label, 
-             V_number, bin, CSTRAT, YEAR, has_age_data, age_quality) %>%
+             V_number, LSPEC, CSTRAT, YEAR, has_age_data, age_quality) %>%
     summarise(Count = sum(Count), .groups = "drop") %>%
     # Convert to wide format (samples as rows, taxa as columns)
     pivot_wider(
@@ -469,7 +469,7 @@ create_rioja_matrix <- function(taxonomic_data, metadata_with_ages,
   # Separate sample metadata from count matrix
   sample_info <- rioja_wide %>%
     select(Sample_ID, strat_level = strat_level_updated, sample_type, sample_label, 
-           V_number, bin, CSTRAT, YEAR, has_age_data, age_quality)
+           V_number, LSPEC, CSTRAT, YEAR, has_age_data, age_quality)
   
   count_matrix <- rioja_wide %>%
     select(all_of(taxa_to_include)) %>%
@@ -616,10 +616,10 @@ export_for_jacopo <- function(rioja_data, output_prefix = "paleo_analysis",
     tibble::rownames_to_column("sample_label") %>%
     left_join(
       rioja_data$samples %>% 
-        select(sample_label, Sample_ID, V_number, sample_type, bin, CSTRAT, YEAR, age_quality),
+        select(sample_label, Sample_ID, V_number, sample_type, LSPEC, CSTRAT, YEAR, age_quality),
       by = "sample_label"
     ) %>%
-    select(Sample_ID, V_number, bin, sample_type, CSTRAT, YEAR, age_quality, 
+    select(Sample_ID, V_number, LSPEC, sample_type, CSTRAT, YEAR, age_quality, 
            everything(), -sample_label) %>%
     arrange(desc(CSTRAT))  # Sort by stratigraphic depth
   
@@ -648,7 +648,7 @@ export_for_jacopo <- function(rioja_data, output_prefix = "paleo_analysis",
   
   # 3. Sample linking information for morphology integration
   linking_info <- rioja_data$samples %>%
-    select(Sample_ID, V_number, bin, sample_type, CSTRAT, YEAR, age_quality, sample_label) %>%
+    select(Sample_ID, V_number, LSPEC, sample_type, CSTRAT, YEAR, age_quality, sample_label) %>%
     arrange(V_number) %>%
     mutate(
       notes = case_when(
@@ -869,10 +869,10 @@ export_paleo_results <- function(rioja_data, output_prefix = "paleo_analysis",
     tibble::rownames_to_column("sample_label") %>%
     left_join(
       rioja_data$samples %>% 
-        select(sample_label, Sample_ID, V_number, sample_type, bin, CSTRAT, YEAR),
+        select(sample_label, Sample_ID, V_number, sample_type, LSPEC, CSTRAT, YEAR),
       by = "sample_label"
     ) %>%
-    select(Sample_ID, V_number, bin, sample_type, CSTRAT, YEAR, 
+    select(Sample_ID, V_number, LSPEC, sample_type, CSTRAT, YEAR, 
            everything(), -sample_label) %>%
     arrange(desc(CSTRAT))  # Sort by stratigraphic depth
   
