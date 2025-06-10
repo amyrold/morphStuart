@@ -46,8 +46,6 @@ if (!require("vegan", quietly = TRUE)) {
 #'   - V_number: Specimen identifier for linking with morphology data
 #'   - LSPEC: Standardized format (L + 4-digit) for age/depth lookup
 #'   - sample_type: "Killifish" or "Stickleback" classification
-#'   - strat_level: Temporary stratigraphic ordering (updated by age integration)
-#'   - sample_label: Human-readable sample names for plots
 #'
 #' @examples
 #' metadata <- extract_paleo_metadata(raw_paleo_data)
@@ -86,23 +84,9 @@ extract_paleo_metadata <- function(paleo) {
         str_detect(Sample_ID, "LXXXX") ~ "Killifish",      # Post-stickleback environment
         str_detect(Sample_ID, "L\\d+") ~ "Stickleback",    # Original stickleback period
         TRUE ~ "Unknown"
-      ),
-      
-      # Create temporary stratigraphic ordering (will be updated with real ages)
-      strat_level = case_when(
-        sample_type == "Stickleback" ~ as.numeric(L_digits),
-        sample_type == "Killifish" ~ 9999,  # Place at top temporarily
-        TRUE ~ NA_real_
-      ),
-      
-      # Create informative sample labels for plots
-      sample_label = case_when(
-        sample_type == "Killifish" ~ paste0("Killifish_", V_number),  # Use V_number for uniqueness
-        sample_type == "Stickleback" ~ L_number_raw,
-        TRUE ~ Sample_ID
       )
     ) %>%
-    select(Sample_ID, V_number, LSPEC, L_number_raw, sample_type, strat_level, sample_label)
+    select(Sample_ID, V_number, LSPEC, sample_type)
   
   # Summary output
   cat("Extracted metadata for", nrow(paleo_with_metadata), "unique samples\n")
@@ -136,13 +120,19 @@ extract_paleo_metadata <- function(paleo) {
 #' This step is essential before any downstream analysis.
 #'
 #' @param paleo Raw paleo data frame with individual microscopy line counts
-#' @param microfossil_type Type of microfossil to process ("Diatom" or "Phytolith")
+#' @param microfossil_type Type of microfossil to process (default NULL = all types)
 #' @return Data frame with merged counts per sample + taxonomic identity
 #'
 #' @examples
-#' merged_counts <- merge_microscopy_counts(raw_paleo, "Diatom")
-#' # Check merging: should have fewer rows than input
-merge_microscopy_counts <- function(paleo, microfossil_type = "Diatom") {
+#' # Process all microfossil types (default)
+#' merged_counts <- merge_microscopy_counts(raw_paleo)
+#' 
+#' # Process only diatoms
+#' merged_diatoms <- merge_microscopy_counts(raw_paleo, "Diatom")
+#' 
+#' # Process only phytoliths  
+#' merged_phytoliths <- merge_microscopy_counts(raw_paleo, "Phytolith")
+merge_microscopy_counts <- function(paleo, microfossil_type = NULL) {
   # Validate inputs
   if (!is.data.frame(paleo)) {
     stop("Input must be a data frame")
@@ -152,17 +142,30 @@ merge_microscopy_counts <- function(paleo, microfossil_type = "Diatom") {
   if (length(missing_cols) > 0) {
     stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
   }
-  if (!microfossil_type %in% paleo$Microfossil_Type) {
-    stop(paste("Microfossil type", microfossil_type, "not found in data"))
-  }
   
-  cat("=== MERGING MICROSCOPY LINE COUNTS ===\n")
-  cat("Focusing on:", microfossil_type, "\n")
+  # Determine which microfossil types to process
+  available_types <- unique(paleo$Microfossil_Type)
+  
+  if (is.null(microfossil_type)) {
+    # Process all types
+    types_to_process <- available_types
+    cat("=== MERGING MICROSCOPY LINE COUNTS ===\n")
+    cat("Processing all microfossil types:", paste(types_to_process, collapse = ", "), "\n")
+  } else {
+    # Process specified type(s)
+    if (!all(microfossil_type %in% available_types)) {
+      missing_types <- setdiff(microfossil_type, available_types)
+      stop(paste("Microfossil type(s) not found in data:", paste(missing_types, collapse = ", ")))
+    }
+    types_to_process <- microfossil_type
+    cat("=== MERGING MICROSCOPY LINE COUNTS ===\n")
+    cat("Processing specified microfossil type(s):", paste(types_to_process, collapse = ", "), "\n")
+  }
   
   # Filter and merge counts by sample + complete taxonomic identity
   # This is the critical step that was missing from original analysis
   merged_counts <- paleo %>%
-    filter(Microfossil_Type == microfossil_type) %>%
+    filter(Microfossil_Type %in% types_to_process) %>%
     group_by(Sample_ID, Microfossil_Type, Morphotype, Genus_Type, Species, Variety) %>%
     summarise(
       Count = sum(Count, na.rm = TRUE),
@@ -172,7 +175,7 @@ merge_microscopy_counts <- function(paleo, microfossil_type = "Diatom") {
     filter(Count > 0)  # Remove zero counts after merging
   
   # Calculate merging statistics
-  original_rows <- nrow(paleo %>% filter(Microfossil_Type == microfossil_type))
+  original_rows <- nrow(paleo %>% filter(Microfossil_Type %in% types_to_process))
   final_rows <- nrow(merged_counts)
   rows_merged <- original_rows - final_rows
   
@@ -180,16 +183,18 @@ merge_microscopy_counts <- function(paleo, microfossil_type = "Diatom") {
   cat("After merging geological samples:", final_rows, "\n")
   cat("Lines merged:", rows_merged, "(", round(100 * rows_merged / original_rows, 1), "%)\n")
   
-  # Show examples of successful merging
+  # Show examples of successful merging by microfossil type
   merge_examples <- merged_counts %>%
     filter(n_lines_merged > 1) %>%
-    arrange(desc(n_lines_merged)) %>%
-    slice_head(n = 5)
+    arrange(Microfossil_Type, desc(n_lines_merged)) %>%
+    group_by(Microfossil_Type) %>%
+    slice_head(n = 3) %>%
+    ungroup()
   
   if (nrow(merge_examples) > 0) {
-    cat("\nExamples of merged counts (top 5):\n")
+    cat("\nExamples of merged counts by type:\n")
     print(merge_examples %>% 
-            select(Sample_ID, Morphotype, Count, n_lines_merged) %>%
+            select(Sample_ID, Microfossil_Type, Morphotype, Count, n_lines_merged) %>%
             mutate(Sample_ID = str_trunc(Sample_ID, 20)))
   }
   
@@ -198,6 +203,19 @@ merge_microscopy_counts <- function(paleo, microfossil_type = "Diatom") {
   if (max_lines_merged > 10) {
     cat("WARNING: Some samples had >10 microscopy lines. Check for data issues.\n")
   }
+  
+  # Summary by microfossil type
+  type_summary <- merged_counts %>%
+    group_by(Microfossil_Type) %>%
+    summarise(
+      samples = n_distinct(Sample_ID),
+      taxa = n_distinct(paste(Morphotype, Genus_Type, Species)),
+      total_specimens = sum(Count),
+      .groups = "drop"
+    )
+  
+  cat("\nSummary by microfossil type:\n")
+  print(type_summary)
   
   return(merged_counts)
 }
@@ -214,13 +232,16 @@ merge_microscopy_counts <- function(paleo, microfossil_type = "Diatom") {
 #' - Fallback to genus level when morphotype unavailable
 #'
 #' @param merged_counts Data frame from merge_microscopy_counts()
-#' @param microfossil_type Type being processed
+#' @param microfossil_type Type to process ("Diatom", "Phytolith", etc.)
 #' @return List containing standardized data and taxonomy summary
 #'
 #' @examples
-#' taxonomy_result <- standardize_taxonomy(merged_counts, "Diatom")
-#' taxa_summary <- taxonomy_result$taxonomy_summary
-standardize_taxonomy <- function(merged_counts, microfossil_type = "Diatom") {
+#' # Process diatoms
+#' diatom_taxonomy <- standardize_taxonomy(merged_counts, "Diatom")
+#' 
+#' # Process phytoliths
+#' phytolith_taxonomy <- standardize_taxonomy(merged_counts, "Phytolith")
+standardize_taxonomy <- function(merged_counts, microfossil_type) {
   # Validate input
   if (!is.data.frame(merged_counts)) {
     stop("Input must be a data frame")
@@ -228,11 +249,26 @@ standardize_taxonomy <- function(merged_counts, microfossil_type = "Diatom") {
   if (!"Count" %in% names(merged_counts)) {
     stop("Input must contain 'Count' column from merge_microscopy_counts()")
   }
+  if (missing(microfossil_type)) {
+    stop("microfossil_type parameter is required. Specify 'Diatom', 'Phytolith', etc.")
+  }
+  if (!"Microfossil_Type" %in% names(merged_counts)) {
+    stop("Input must contain 'Microfossil_Type' column")
+  }
+  
+  # Check if the specified type exists in the data
+  available_types <- unique(merged_counts$Microfossil_Type)
+  if (!microfossil_type %in% available_types) {
+    stop(paste("Microfossil type", microfossil_type, "not found in data.", 
+               "Available types:", paste(available_types, collapse = ", ")))
+  }
   
   cat("=== STANDARDIZING TAXONOMY ===\n")
   cat("Applying Jacopo's taxonomic preferences for", microfossil_type, "\n")
   
+  # Filter to specified microfossil type and standardize
   standardized <- merged_counts %>%
+    filter(Microfossil_Type == microfossil_type) %>%
     mutate(
       # Apply Jacopo's hierarchical taxonomic preferences
       Taxon = case_when(
@@ -270,7 +306,7 @@ standardize_taxonomy <- function(merged_counts, microfossil_type = "Diatom") {
     )
   
   # Summary output
-  cat("Taxonomic standardization complete:\n")
+  cat("Taxonomic standardization complete for", microfossil_type, ":\n")
   cat("Total taxa after standardization:", nrow(taxon_summary), "\n")
   cat("Taxa representing 80% of abundance:", sum(taxon_summary$cumulative_percent <= 80), "\n")
   
@@ -282,7 +318,8 @@ standardize_taxonomy <- function(merged_counts, microfossil_type = "Diatom") {
   
   return(list(
     data = standardized,
-    taxonomy_summary = taxon_summary
+    taxonomy_summary = taxon_summary,
+    microfossil_type = microfossil_type  # Store for downstream use
   ))
 }
 
@@ -293,8 +330,8 @@ standardize_taxonomy <- function(merged_counts, microfossil_type = "Diatom") {
 #' Integrate Age and Depth Data from Morphology Dataset
 #'
 #' Links paleo samples to actual stratigraphic depths (CSTRAT) and ages (YEAR)
-#' using Mike Bell's estimates via LSPEC matching. This replaces temporary 
-#' L-number ordering with real stratigraphic positions.
+#' using Mike Bell's estimates via LSPEC matching. Creates stratigraphic ordering
+#' for samples with and without age data.
 #'
 #' @param paleo_metadata Output from extract_paleo_metadata()
 #' @param morph_with_age Morphology dataset containing age/depth estimates
@@ -340,13 +377,25 @@ integrate_age_data <- function(paleo_metadata, morph_with_age) {
   paleo_with_ages <- paleo_metadata %>%
     left_join(age_reference, by = "LSPEC", suffix = c("", "_morph")) %>%
     mutate(
+      # Create stratigraphic ordering for all samples
+      # Extract numeric part from LSPEC for ordering when no CSTRAT available
+      LSPEC_numeric = as.numeric(str_extract(LSPEC, "\\d+")),
+      
       # Update stratigraphic levels with real data when available
       strat_level_updated = case_when(
         !is.na(CSTRAT) ~ CSTRAT,                    # Use real depth when available
-        sample_type == "Stickleback" ~ strat_level,  # Fall back to L-number ordering
-        sample_type == "Killifish" ~ 9999,          # Keep killifish at top
-        TRUE ~ strat_level
+        sample_type == "Stickleback" & !is.na(LSPEC_numeric) ~ LSPEC_numeric,  # Use L-number for ordering
+        sample_type == "Killifish" ~ 9999,          # Place killifish at top
+        TRUE ~ NA_real_
       ),
+      
+      # Create sample labels for plotting and identification
+      sample_label = case_when(
+        sample_type == "Killifish" ~ paste0("Killifish_", V_number),
+        sample_type == "Stickleback" ~ LSPEC,
+        TRUE ~ Sample_ID
+      ),
+      
       has_age_data = !is.na(CSTRAT) | !is.na(YEAR),
       age_quality = case_when(
         !is.na(CSTRAT) & !is.na(YEAR) ~ "Both depth and age",
@@ -354,7 +403,9 @@ integrate_age_data <- function(paleo_metadata, morph_with_age) {
         !is.na(YEAR) ~ "Age only",
         TRUE ~ "No age data"
       )
-    )
+    ) %>%
+    # Remove intermediate column
+    select(-LSPEC_numeric)
   
   # Calculate integration statistics
   integration_summary <- paleo_with_ages %>%

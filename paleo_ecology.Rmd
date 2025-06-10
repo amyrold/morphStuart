@@ -1,0 +1,355 @@
+---
+title: "paleo ecology"
+author: "Aaron Myrold"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#==============================================================================#
+# SETUP
+## Loading Libraries
+```{r Libraries, include=FALSE}
+# load libraries needed for our analyses
+# 1 ggplot2
+if (!require("ggplot2")) install.packages("ggplot2")
+library(ggplot2)
+
+# 2 dplyr
+if (!require("dplyr")) install.packages("dplyr")
+library(dplyr)
+
+# 3 tidyr
+if (!require("tidyr")) install.packages("tidyr")
+library(tidyr)
+
+# 4 stringr
+if (!require("stringr")) install.packages("stringr")
+library(stringr)
+
+# 5 tibble
+if (!require("tibble")) install.packages("tibble")
+library(tibble)
+
+# 6 rioja
+if (!require("rioja")) install.packages("rioja")
+library(rioja)
+
+# 7 vegan
+if (!require("vegan")) install.packages("vegan")
+library(vegan)
+
+# 8 purrr
+if (!require("purrr")) install.packages("purrr")
+library(purrr)
+
+```
+
+## Folder Management
+```{r}
+# This is a function to initialize a new project
+# It creates required subfolders (see defaults) 
+# It outputs an object that stores the relative paths to these sub-folders
+
+# If calling the function within the working directory of the project, project_number = 0
+# this will create necessary sub-folders in current working directory
+
+# If creating a new root folder for the project, provide project_number >=1 and a project_name
+# this will create a folder "pX.project_name/" to store all sub-folders
+new_project <- function(project_number, project_name = NULL, subfolders = NULL, wk.dir = getwd()) {
+  # Set default subfolders
+  default_subfolders <- c("data", "scripts", "output", "docs")
+  
+  # Use provided sub-folders or defaults if none are provided
+  if (is.null(subfolders)) {
+    subfolders <- default_subfolders
+  }
+  
+  # Initialize project paths list
+  project_paths <- list()
+  
+  # Check if this is a "root directory" project (project_number = 0)
+  is_root_project <- project_number == 0
+  
+  if (is_root_project) {
+    # Use working directory as the base path for root projects
+    base_path <- wk.dir
+    project_paths$main <- wk.dir
+    message("Creating folders directly in working directory: ", wk.dir)
+  } else {
+    # For normal projects, validate project name is provided
+    if (is.null(project_name)) {
+      stop("Project name is required when project_number is not 0")
+    }
+    
+    # Create project folder name
+    project_folder <- paste0("p", project_number, ".", project_name)
+    
+    # Full path for the project folder
+    project_path <- file.path(wk.dir, project_folder)
+    
+    # Create the project folder if it doesn't exist
+    if (!file.exists(project_path)) {
+      dir.create(project_path)
+      message("Created project folder: ", project_path)
+    } else {
+      message("Project folder already exists: ", project_path)
+    }
+    
+    # Set base path for subfolders
+    base_path <- project_path
+    project_paths$main <- project_path
+  }
+  
+  # Create sub-folders
+  for (sub in subfolders) {
+    # Determine subfolder name based on project type
+    if (is_root_project) {
+      subfolder_name <- sub
+    } else {
+      subfolder_name <- paste0("p", project_number, ".", sub)
+    }
+    
+    # Full path for the subfolder
+    subfolder_path <- file.path(base_path, subfolder_name)
+    
+    # Create sub-folder if it doesn't exist
+    if (!file.exists(subfolder_path)) {
+      dir.create(subfolder_path, recursive = TRUE)  # Added recursive=TRUE for nested paths
+      message("Created subfolder: ", subfolder_path)
+    } else {
+      message("Subfolder already exists: ", subfolder_path)
+    }
+    
+    # Add the sub-folder path to the list
+    project_paths[[sub]] <- paste0(subfolder_path, "/")
+  }
+  
+  # Return the list of paths as an object
+  return(project_paths)
+}
+
+```
+
+## Initialize Directories
+```{r}
+# Initialize new project directories
+p <- new_project(0, subfolders = c("1.data", "1.data/a.raw", "1.data/b.merged",
+                                   "1.data/c.flagged","1.data/d.processed", 
+                                   "2.scripts", "3.outputs", "4.docs"))
+cat("✓ Project directories initialized\n")
+```
+
+## Source Functions
+```{r Load Validation Scripts, include=FALSE}
+# Source the validation and logging functions
+source(paste0(p$`2.scripts`,"validation_functions.R"))
+source(paste0(p$`2.scripts`,"quality_assessment.R"))
+source(paste0(p$`2.scripts`,"project_validation.R"))
+
+cat("✓ All validation and logging functions loaded\n")
+```
+
+## Global Variables
+```{r Global Variables, include=FALSE}
+# store current user's working directory
+wk.dir <- getwd()
+# Set seed for reproducibility
+set.seed(333)
+
+# Initialize the logging system
+processing_log <- initialize_log("Paleo Ecology Cleaning")
+```
+
+#==============================================================================#
+
+
+#==============================================================================#
+# PALEO-ECOLOGICAL DATA 
+## Data Import
+```{r}
+# Load paleoeco cleaning functions
+source(paste0(p$`2.scripts`, "paleoeco_cleaning.R"))
+# Read paleo-ecological data
+paleo <- read.csv(paste0(p$`1.data/a.raw`, "060625_paleoeco_seriesL.csv"))
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log, 
+  step_name = "Paleo Data Import",
+  input_data = paleo,
+  notes = "Initial import of paleo-ecological microfossil data"
+)
+
+# Basic structure check
+cat("Paleo data structure:\n")
+cat("Total rows:", nrow(paleo), "\n")
+cat("Unique samples:", length(unique(paleo$Sample_ID)), "\n")
+cat("Microfossil types:", paste(unique(paleo$Microfossil_Type), collapse = ", "), "\n")
+```
+
+## Extract Sample Metadata
+```{r}
+# Extract and standardize sample metadata (simplified output)
+paleo_metadata <- extract_paleo_metadata(paleo)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Paleo Metadata Extraction",
+  input_data = paleo,
+  output_data = paleo_metadata,
+  notes = "Extracted V-numbers, LSPEC, and sample types for data linking"
+)
+
+# Quick quality check
+metadata_summary <- paleo_metadata %>%
+  summarise(
+    samples_with_v_numbers = sum(!is.na(V_number)),
+    samples_with_LSPEC = sum(!is.na(LSPEC)),
+    killifish_samples = sum(sample_type == "Killifish"),
+    stickleback_samples = sum(sample_type == "Stickleback")
+  )
+
+print(metadata_summary)
+```
+
+## Merge Microscopy Counts
+```{r}
+# Option 1: Process all microfossil types (new default behavior)
+merged_all_counts <- merge_microscopy_counts(paleo)
+
+# Option 2: Process only diatoms (if you want to focus on diatoms specifically)
+merged_diatom_counts <- merge_microscopy_counts(paleo, microfossil_type = "Diatom")
+
+# Option 3: Process only phytoliths (example)
+# merged_phytolith_counts <- merge_microscopy_counts(paleo, microfossil_type = "Phytolith")
+
+# For this example, let's continue with diatoms to match the original workflow
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Microscopy Count Merging",
+  input_data = paleo,
+  output_data = merged_diatom_counts,
+  notes = "Merged multiple microscopy line counts per geological sample for diatoms"
+)
+```
+
+## Standardize Taxonomy
+```{r}
+# Apply Jacopo's taxonomic preferences (now requires microfossil_type parameter)
+standardized_diatom_taxonomy <- standardize_taxonomy(merged_diatom_counts, microfossil_type = "Diatom")
+
+# If processing phytoliths as well:
+# standardized_phytolith_taxonomy <- standardize_taxonomy(merged_phytolith_counts, microfossil_type = "Phytolith")
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Taxonomic Standardization",
+  input_data = merged_diatom_counts,
+  output_data = standardized_diatom_taxonomy$data,
+  notes = "Standardized to morphotype-level taxonomy per Jacopo's specifications for diatoms"
+)
+
+# Export taxa list for Jacopo's ecological review
+write.csv(standardized_diatom_taxonomy$taxonomy_summary, 
+          file = paste0(p$`1.data/c.flagged`, "/diatom_taxa_for_jacopo_review.csv"),
+          row.names = FALSE)
+```
+
+## Integrate Age Data
+```{r}
+# Link paleo samples with age/depth data from morphology dataset
+# Note: This function now generates sample_label internally
+paleo_with_ages <- integrate_age_data(paleo_metadata, morph_with_age)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Age Data Integration",
+  input_data = paleo_metadata,
+  output_data = paleo_with_ages$data,
+  notes = paste("Integrated age data for", paleo_with_ages$integration_summary$samples_with_age, 
+                "out of", paleo_with_ages$integration_summary$total_samples, "samples")
+)
+
+# Validation check for age integration
+if(paleo_with_ages$integration_summary$samples_with_age == 0) {
+  warning("No samples successfully linked with age data - check bin formatting")
+}
+```
+
+## Create Rioja Matrix
+```{r}
+# Convert to rioja-compatible format
+rioja_diatoms <- create_rioja_matrix(
+  taxonomic_data = standardized_diatom_taxonomy,
+  metadata_with_ages = paleo_with_ages,
+  min_total_count = 0,  # Include all taxa initially per Jacopo's request
+  min_samples = 1,
+  include_killifish = TRUE
+)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Rioja Matrix Creation",
+  input_data = standardized_diatom_taxonomy$data,
+  output_data = rioja_diatoms$counts,
+  notes = paste("Created", nrow(rioja_diatoms$counts), "×", ncol(rioja_diatoms$counts), 
+                "matrix for stratigraphic analysis")
+)
+```
+
+## Process Multiple Microfossil Types (Optional)
+```{r}
+# If you want to process multiple types in the same workflow:
+process_microfossil_type <- function(paleo_data, metadata_with_ages, type, output_prefix) {
+  cat("\n=== PROCESSING", toupper(type), "===\n")
+  
+  # Merge counts for this type
+  merged_counts <- merge_microscopy_counts(paleo_data, microfossil_type = type)
+  
+  # Standardize taxonomy
+  standardized_taxonomy <- standardize_taxonomy(merged_counts, microfossil_type = type)
+  
+  # Create rioja matrix
+  rioja_matrix <- create_rioja_matrix(
+    taxonomic_data = standardized_taxonomy,
+    metadata_with_ages = metadata_with_ages,
+    min_total_count = 0,
+    min_samples = 1,
+    include_killifish = TRUE
+  )
+  
+  # Export results
+  exported_files <- export_paleo_results(rioja_matrix, 
+                                         output_prefix = paste0(tolower(type), "_analysis"),
+                                         output_dir = p$`1.data/b.merged`)
+  
+  return(list(
+    counts = merged_counts,
+    taxonomy = standardized_taxonomy,
+    rioja_matrix = rioja_matrix,
+    files = exported_files
+  ))
+}
+
+# Example: Process all available types
+available_types <- unique(paleo$Microfossil_Type)
+results_by_type <- list()
+
+for(type in available_types) {
+  results_by_type[[type]] <- process_microfossil_type(paleo, paleo_with_ages, type, tolower(type))
+}
+
+# Individual results are available as:
+# results_by_type[["Diatom"]]$rioja_matrix
+# results_by_type[["Phytolith"]]$rioja_matrix
+```
+
