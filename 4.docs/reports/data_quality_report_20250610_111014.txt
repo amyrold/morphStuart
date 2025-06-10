@@ -1,8 +1,0 @@
-FISH MORPHOLOGY DATA QUALITY REPORT
-==================================
-
-Generated: 2025-06-10 11:10:14 
-Total specimens: 59 
-
-No quality flags raised.
-

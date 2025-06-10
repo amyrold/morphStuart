@@ -5,174 +5,24 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
-```
-#==============================================================================#
-# PROJECT INTRODUCTION
-
 #==============================================================================#
 # SETUP
-## Loading Libraries
-```{r Libraries, include=FALSE}
-# load libraries needed for our analyses
-# 1 ggplot2
-if (!require("ggplot2")) install.packages("ggplot2")
-library(ggplot2)
+```{r setup, include=FALSE}
+# Set working directory to root
+knitr::opts_knit$set(root.dir = dirname(getwd()))
 
-# 2 dplyr
-if (!require("dplyr")) install.packages("dplyr")
-library(dplyr)
-
-# 3 tidyr
-if (!require("tidyr")) install.packages("tidyr")
-library(tidyr)
-
-# 4 stringr
-if (!require("stringr")) install.packages("stringr")
-library(stringr)
-
-# 5 tibble
-if (!require("tibble")) install.packages("tibble")
-library(tibble)
-
-# 6 rioja
-if (!require("rioja")) install.packages("rioja")
-library(rioja)
-
-# 7 vegan
-if (!require("vegan")) install.packages("vegan")
-library(vegan)
-
-# 8 purrr
-if (!require("purrr")) install.packages("purrr")
-library(purrr)
-
-```
-
-## Folder Management
-```{r}
-# This is a function to initialize a new project
-# It creates required subfolders (see defaults) 
-# It outputs an object that stores the relative paths to these sub-folders
-
-# If calling the function within the working directory of the project, project_number = 0
-# this will create necessary sub-folders in current working directory
-
-# If creating a new root folder for the project, provide project_number >=1 and a project_name
-# this will create a folder "pX.project_name/" to store all sub-folders
-new_project <- function(project_number, project_name = NULL, subfolders = NULL, wk.dir = getwd()) {
-  # Set default subfolders
-  default_subfolders <- c("data", "scripts", "output", "docs")
-  
-  # Use provided sub-folders or defaults if none are provided
-  if (is.null(subfolders)) {
-    subfolders <- default_subfolders
-  }
-  
-  # Initialize project paths list
-  project_paths <- list()
-  
-  # Check if this is a "root directory" project (project_number = 0)
-  is_root_project <- project_number == 0
-  
-  if (is_root_project) {
-    # Use working directory as the base path for root projects
-    base_path <- wk.dir
-    project_paths$main <- wk.dir
-    message("Creating folders directly in working directory: ", wk.dir)
-  } else {
-    # For normal projects, validate project name is provided
-    if (is.null(project_name)) {
-      stop("Project name is required when project_number is not 0")
-    }
-    
-    # Create project folder name
-    project_folder <- paste0("p", project_number, ".", project_name)
-    
-    # Full path for the project folder
-    project_path <- file.path(wk.dir, project_folder)
-    
-    # Create the project folder if it doesn't exist
-    if (!file.exists(project_path)) {
-      dir.create(project_path)
-      message("Created project folder: ", project_path)
-    } else {
-      message("Project folder already exists: ", project_path)
-    }
-    
-    # Set base path for subfolders
-    base_path <- project_path
-    project_paths$main <- project_path
-  }
-  
-  # Create sub-folders
-  for (sub in subfolders) {
-    # Determine subfolder name based on project type
-    if (is_root_project) {
-      subfolder_name <- sub
-    } else {
-      subfolder_name <- paste0("p", project_number, ".", sub)
-    }
-    
-    # Full path for the subfolder
-    subfolder_path <- file.path(base_path, subfolder_name)
-    
-    # Create sub-folder if it doesn't exist
-    if (!file.exists(subfolder_path)) {
-      dir.create(subfolder_path, recursive = TRUE)  # Added recursive=TRUE for nested paths
-      message("Created subfolder: ", subfolder_path)
-    } else {
-      message("Subfolder already exists: ", subfolder_path)
-    }
-    
-    # Add the sub-folder path to the list
-    project_paths[[sub]] <- paste0(subfolder_path, "/")
-  }
-  
-  # Return the list of paths as an object
-  return(project_paths)
-}
-
-```
-
-## Initialize Directories
-```{r}
-# Initialize new project directories
-p <- new_project(0, subfolders = c("1.data", "1.data/a.raw", "1.data/b.merged",
-                                   "1.data/c.flagged","1.data/d.processed", 
-                                   "2.scripts", "3.outputs", "4.docs"))
-cat("✓ Project directories initialized\n")
-```
-
-## Source Functions
-```{r Load Validation Scripts, include=FALSE}
-# Source the validation and logging functions
-source(paste0(p$`2.scripts`,"validation_functions.R"))
-source(paste0(p$`2.scripts`,"quality_assessment.R"))
-source(paste0(p$`2.scripts`,"project_validation.R"))
-
-cat("✓ All validation and logging functions loaded\n")
-```
-
-## Global Variables
-```{r Global Variables, include=FALSE}
-# store current user's working directory
-wk.dir <- getwd()
-# Set seed for reproducibility
-set.seed(333)
-
-# Initialize the logging system
-processing_log <- initialize_log("Fish Morphology Data Cleaning Pipeline v2.0")
+# Source project setup and run config
+source("src/project_setup.R")
+setup_project('config.yaml')
 ```
 
 #==============================================================================#
 # DATA IMPORT
 ```{r}
 # Source cleaning functions
-source(paste0(p$`2.scripts`, "morph_cleaning.R"))
+source(paste0(p$src, "morph_cleaning.R"))
 # Read in data and check initial structure
-morph <- read.csv(paste0(p$`1.data/a.raw`, "020625_PitLMorph.csv"))
+morph <- read.csv(paste0(p$data.raw, "020625_PitLMorph.csv"))
 #str(morph)
 
 # ADD LOGGING:
@@ -192,7 +42,7 @@ validate_step(
 )
 
 # ADD QUALITY ASSESSMENT:
-initial_quality <- create_quality_report(morph, output_dir = paste0(p$`4.docs`, "reports"))
+initial_quality <- create_quality_report(morph, output_dir = p$docs.logs)
 ```
 
 ## ID Structure Analysis
@@ -277,7 +127,7 @@ missing_scales_detail <- morph %>%
 
 # Write the detailed report
 write.csv(missing_scales_detail, 
-          file = paste0(p$`1.data/c.flagged`, "/fish_missing_scales_detailed.csv"), 
+          file = paste0(p$data.flagged, "fish_missing_scales_detailed.csv"), 
           row.names = FALSE)
 
 # Print summary of scale check
@@ -306,11 +156,11 @@ morph <- morph_with_scales
 
 # Write the datasets to separate files for reference
 write.csv(morph_with_scales, 
-          file = paste0(p$`1.data/a.raw`, "/fish_with_scales.csv"), 
+          file = paste0(p$data.raw, "fish_with_scales.csv"), 
           row.names = FALSE)
 
 write.csv(morph_without_scales, 
-          file = paste0(p$`1.data/c.flagged`, "/fish_without_scales.csv"), 
+          file = paste0(p$data.flagged, "fish_without_scales.csv"), 
           row.names = FALSE)
 ```
 
@@ -360,7 +210,7 @@ merged_non_overlap <- merge_non_overlap(overlap_results$non_overlap_fish)
 
 # Write merged data for Non-Overlapping Fish
 merged_file <- write.csv(merged_non_overlap, 
-          file = paste0(p$`1.data/b.merged`, "/merged_non_overlap.csv"))
+          file = paste0(p$data.intermediate, "merged_non_overlap.csv"))
 
 # ADD LOGGING:
 processing_log <- log_step(
@@ -383,7 +233,7 @@ review_results <- create_review_list(overlap_results, use_threshold = TRUE)
 # review_results_all <- create_review_list(overlap_results, use_threshold = FALSE)
 
 export_review_list(review_results, file_prefix = "fish_fossil_review",
-                   output_dir = p$`1.data/c.flagged`)
+                   output_dir = p$data.flagged)
 
 # ADD LOGGING:
 processing_log <- log_step(
@@ -411,7 +261,7 @@ p1 <-ggplot(filtered_metrics, aes(x = relative_diff)) +
        x = "Relative Difference (proportion of scale)",
        y = "Count") +
   theme_minimal()
-ggsave(paste0(p$`3.outputs`, "/overlap_relative_differences.svg"), p1, width = 10, height = 6)
+ggsave(paste0(p$data.processed, "overlap_relative_differences.svg"), p1, width = 10, height = 6)
 
 # Visualization 2: Count of overlaps by measurement type
 overlap_by_measure <- filtered_metrics %>%
@@ -429,7 +279,7 @@ p2 <- ggplot(overlap_by_measure, aes(x = reorder(measure, count), y = count)) +
   labs(title = paste0("Number of fish with duplicate measurements by type", threshold_text),
        x = "Measurement",
        y = "Count of fish with duplicates") 
-ggsave(paste0(p$`3.outputs`, "/overlaps_by_measure.svg"), p2, width = 10, height = 6)
+ggsave(paste0(p$processed, "/overlaps_by_measure.svg"), p2, width = 10, height = 6)
 
 # Visualization 3: Distribution of flags per fish
 p3 <- ggplot(review_results$summary, aes(x = total_diffs)) +
@@ -438,7 +288,7 @@ p3 <- ggplot(review_results$summary, aes(x = total_diffs)) +
   labs(title = paste0("Distribution of duplicate measurements per fish", threshold_text),
        x = "Number of duplicate measurements",
        y = "Count of fish")
-ggsave(paste0(p$`3.outputs`, "/duplicates_per_fish.svg"), p3, width = 8, height = 6)
+ggsave(paste0(p$processed, "/duplicates_per_fish.svg"), p3, width = 8, height = 6)
 
 # Visualization 4: Distribution of differences by variable type
 p4 <- ggplot(filtered_metrics, 
@@ -451,14 +301,14 @@ p4 <- ggplot(filtered_metrics,
        y = "Absolute Difference",
        fill = "Variable Type") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(paste0(p$`3.outputs`, "/differences_by_variable_type.svg"), p4, width = 10, height = 6)
+ggsave(paste0(p$processed, "/differences_by_variable_type.svg"), p4, width = 10, height = 6)
 ```
 #==============================================================================#
 # MERGE AGE ESTIMATES
 ## Format Age Data for Merging
 ```{r Format Age Data}
 # Read age data (assuming it's already loaded as 'age')
-age <- read.csv(paste0(p$`1.data/a.raw`, "PitLMorph_fieldorder.csv"))
+age <- read.csv(paste0(p$data.raw, "PitLMorph_fieldorder.csv"))
 
 # Convert L..SPEC to match bin formatting
 age_formatted <- age %>%
@@ -492,7 +342,7 @@ head(age_formatted)
 
 # Read the merged morphological data if not already in memory
 if (!exists("merged_non_overlap")) {
-  merged_non_overlap <- read.csv(paste0(p$`1.data/b.merged`, "/merged_non_overlap.csv"))
+  merged_non_overlap <- read.csv(paste0(p$data.intermediate, "/merged_non_overlap.csv"))
 }
 
 # Perform the merge
@@ -509,7 +359,7 @@ processing_log <- log_step(
 )
 
 # EXPORT COMPREHENSIVE PROCESSING LOG:
-log_files <- export_log(processing_log, output_dir = paste0(p$`4.docs`, "reports"))
+log_files <- export_log(processing_log, output_dir = p$docs.logs)
 
 
 # Check merge results
@@ -556,7 +406,7 @@ if(length(unused_age_LSPECs) > 0) {
 ```{r Save Merged Data}
 # Write the merged dataset
 write.csv(morph_with_age, 
-          file = paste0(p$`1.data/b.merged`, "morph_with_age.csv"),
+          file = paste0(p$data.intermediate, "morph_with_age.csv"),
           row.names = FALSE)
 
 # Create a summary report of the merge
@@ -570,11 +420,11 @@ merge_report <- list(
 )
 
 # Save the merge report
-saveRDS(merge_report, file = paste0(p$`3.outputs`, "/age_merge_report.rds"))
+saveRDS(merge_report, file = paste0(p$processed, "/age_merge_report.rds"))
 
 cat("\nMerge completed successfully!")
-cat("\nMerged dataset saved to:", paste0(p$`1.data/b.merged`, "/morph_with_age.csv"))
-cat("\nMerge report saved to:", paste0(p$`3.outputs`, "/age_merge_report.rds"))
+cat("\nMerged dataset saved to:", paste0(p$data.intermediate, "/morph_with_age.csv"))
+cat("\nMerge report saved to:", paste0(p$processed, "/age_merge_report.rds"))
 ```
 
 ## Visualization of Age Data Coverage
@@ -593,7 +443,7 @@ if(sum(!is.na(morph_with_age$CSTRAT)) > 0) {
     theme_minimal()
   
   print(p1)
-  ggsave(paste0(p$`3.outputs`, "specimens_by_strat_level.svg"), p1, width = 8, height = 6)
+  ggsave(paste0(p$results.figures.morphology, "specimens_by_strat_level.svg"), p1, width = 8, height = 6)
   
   # 2. Age distribution
   p2 <- ggplot(morph_with_age %>% filter(!is.na(YEAR)), 
@@ -606,7 +456,7 @@ if(sum(!is.na(morph_with_age$CSTRAT)) > 0) {
     scale_x_continuous(labels = scales::comma)
   
   print(p2)
-  ggsave(paste0(p$`3.outputs`, "specimens_by_age.svg"), p2, width = 8, height = 6)
+  ggsave(paste0(p$results.figures.morphology, "specimens_by_age.svg"), p2, width = 8, height = 6)
 
   
   # 3. Relationship between CSTRAT and ISTRAT
@@ -621,7 +471,7 @@ if(sum(!is.na(morph_with_age$CSTRAT)) > 0) {
       theme_minimal()
     
     print(p3)
-    ggsave(paste0(p$`3.outputs`, "cstrat_vs_istrat.svg"), p3, width = 8, height = 6)
+    ggsave(paste0(p$results.figures.morphology, "cstrat_vs_istrat.svg"), p3, width = 8, height = 6)
   }
 }
 ```
@@ -736,10 +586,10 @@ if(nrow(trait_evolution_data) > 0) {
   cat("No trait evolution data available - check if specimens have both age and trait measurements.\n")
 }
 
-ggsave(paste0(p$`3.outputs`, "age_distribution.svg"), p_age_dist, width = 8, height = 6)
-ggsave(paste0(p$`3.outputs`, "traits_over_time.svg"), p_traits_time, width = 12, height = 8)
-ggsave(paste0(p$`3.outputs`, "traits_over_strat.svg"), p_traits_strat, width = 12, height = 8)
-if(exists("p_sl_evolution")) ggsave(paste0(p$`3.outputs`, "body_size_evolution.svg"), p_sl_evolution, width = 8, height = 6)
+ggsave(paste0(p$results.figures.morphology, "age_distribution.svg"), p_age_dist, width = 8, height = 6)
+ggsave(paste0(p$results.figures.morphology, "traits_over_time.svg"), p_traits_time, width = 12, height = 8)
+ggsave(paste0(p$results.figures.morphology, "traits_over_strat.svg"), p_traits_strat, width = 12, height = 8)
+if(exists("p_sl_evolution")) ggsave(paste0(p$results.figures.morphology, "body_size_evolution.svg"), p_sl_evolution, width = 8, height = 6)
 ```
 
 #==============================================================================#

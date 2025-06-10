@@ -5,26 +5,25 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 #==============================================================================#
 # SETUP
-```{r}
-source("2.scripts/project_setup.R")
+```{r setup, include=FALSE}
+# Set working directory to root
+knitr::opts_knit$set(root.dir = dirname(getwd()))
+
+# Source project setup and run config
+source("src/project_setup.R")
 setup_project('config.yaml')
 ```
 
 #==============================================================================#
-
 # PALEO-ECOLOGICAL DATA 
 ## Data Import
 ```{r}
 # Load paleoeco cleaning functions
-source(paste0(p$`2.scripts`, "paleoeco_cleaning.R"))
+source(paste0(p$src, "paleoeco_cleaning.R"))
 # Read paleo-ecological data
-paleo <- read.csv(paste0(p$`1.data/a.raw`, "060625_paleoeco_seriesL.csv"))
+paleo <- read.csv(paste0(p$data.raw, "060625_paleoeco_seriesL.csv"))
 
 # ADD LOGGING:
 processing_log <- log_step(
@@ -108,7 +107,7 @@ processing_log <- log_step(
 
 # Export taxa list for Jacopo's ecological review
 write.csv(standardized_diatom_taxonomy$taxonomy_summary, 
-          file = paste0(p$`1.data/c.flagged`, "/diatom_taxa_for_jacopo_review.csv"),
+          file = paste0(p$data.flagged, "/diatom_taxa_for_jacopo_review.csv"),
           row.names = FALSE)
 ```
 
@@ -162,7 +161,7 @@ taxa_for_review <- data.frame(
   mutate(rank = row_number())
 
 write.csv(taxa_for_review, 
-          file = paste0(p$`1.data/c.flagged`, "/diatom_taxa_for_review.csv"),
+          file = paste0(p$data.flagged, "/diatom_taxa_for_review.csv"),
           row.names = FALSE)
 ```
 
@@ -181,7 +180,7 @@ if(rioja_diatoms$has_age_data) {
   plot_depths <- depth_var[valid_samples]
   
   # Simple stratigraphic plot
-  svg(paste0(p$`3.outputs`, "simple_diatom_diagram.svg"), 
+  svg(paste0(p$results.figures.paleoeco, "simple_diatom_diagram.svg"), 
       width = 12, height = 8)
   
   # Minimal parameters to avoid conflicts
@@ -199,7 +198,7 @@ if(rioja_diatoms$has_age_data) {
     diss <- dist(sqrt(plot_matrix/rowSums(plot_matrix)))
     clust <- chclust(diss, method = "coniss")
     
-    svg(paste0(p$`3.outputs`, "diatom_with_clustering.svg"), 
+    svg(paste0(p$results.figures.paleoeco, "diatom_with_clustering.svg"), 
         width = 14, height = 10)
     
     strat_plot <- strat.plot(
@@ -224,7 +223,7 @@ if(rioja_diatoms$has_age_data) {
 # Export in format for analysis
 exported_files <- export_paleo_results(rioja_diatoms, 
                                        output_prefix = "diatom_analysis",
-                                       output_dir = p$`1.data/b.merged`)
+                                       output_dir = p$data.intermediate)
 
 # ADD LOGGING:
 processing_log <- log_step(
@@ -243,7 +242,7 @@ cat("Files ready for analysis and review.\n")
 ```{r}
 # Create quality report matching morphology pipeline
 paleo_quality <- create_quality_report(rioja_diatoms$counts, 
-                                       output_dir = paste0(p$`4.docs`, "reports"))
+                                       output_dir = p$docs.logs)
 
 # Summary visualization - check if CSTRAT data exists
 if(!is.null(rioja_diatoms$samples$CSTRAT) && sum(!is.na(rioja_diatoms$samples$CSTRAT)) > 0) {
@@ -256,7 +255,7 @@ if(!is.null(rioja_diatoms$samples$CSTRAT) && sum(!is.na(rioja_diatoms$samples$CS
     theme_minimal()
   
   print(p_sample_dist)
-  ggsave(paste0(p$`3.outputs`, "paleo_sample_distribution.svg"), p_sample_dist, width = 8, height = 6)
+  ggsave(paste0(p$results.figures.paleoeco, "paleo_sample_distribution.svg"), p_sample_dist, width = 8, height = 6)
 }
 
 # Taxa abundance distribution
@@ -274,7 +273,7 @@ p_taxa_abundance <- rioja_diatoms$counts %>%
   theme_minimal()
 
 print(p_taxa_abundance)
-ggsave(paste0(p$`3.outputs`, "top_taxa_abundance.svg"), p_taxa_abundance, width = 10, height = 8)
+ggsave(paste0(p$results.figures.paleoeco, "top_taxa_abundance.svg"), p_taxa_abundance, width = 10, height = 8)
 ```
 
 ## Process Multiple Microfossil Types (Optional)
@@ -298,7 +297,7 @@ process_microfossil_type <- function(paleo_data, metadata_with_ages, type, outpu
   # Export results
   exported_files <- export_paleo_results(rioja_matrix, 
                                          output_prefix = paste0(tolower(type), "_analysis"),
-                                         output_dir = p$`1.data/b.merged`)
+                                         output_dir = p$data.intermediate)
   
   return(list(
     counts = merged_counts,

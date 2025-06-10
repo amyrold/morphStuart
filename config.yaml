@@ -39,23 +39,33 @@ packages:
 # Directory structure
 folders:
   # Data folders
-  - "1.data"
-  - "1.data/a.raw"
-  - "1.data/b.merged" 
-  - "1.data/c.flagged"
-  - "1.data/d.processed"
+  - "data"
+  - "data/raw"
+  - "data/processed" 
+  - "data/flagged"
+  - "data/intermediate"
   
-  # Code and documentation
-  - "2.scripts"
-  - "3.outputs"
-  - "4.docs"
-  - "4.docs/reports"
-  - "4.docs/logs"
+  # Code and functions
+  - "src"
+  - "scripts"
   
-  # Optional analysis-specific folders
-  - "3.outputs/morphology"
-  - "3.outputs/paleoeco"
-  - "3.outputs/integrated"
+  # Results and outputs
+  - "results"
+  - "results/figures"
+  - "results/figures/morphology"
+  - "results/figures/paleoeco"
+  - "results/figures/integrated"
+  - "results/tables"
+  - "results/reports"
+  
+  # Documentation
+  - "docs"
+  - "docs/logs"
+  - "docs/metadata"
+  - "docs/methods"
+  
+  # Environment
+  - "env"
 
 # Function files to load (in order)
 functions:
