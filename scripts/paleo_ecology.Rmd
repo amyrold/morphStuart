@@ -89,29 +89,6 @@ processing_log <- log_step(
 )
 ```
 
-## Standardize Taxonomy
-```{r}
-# Apply Jacopo's taxonomic preferences (now requires microfossil_type parameter)
-standardized_diatom_taxonomy <- standardize_taxonomy(merged_diatom_counts, microfossil_type = "Diatom")
-
-# If processing phytoliths as well:
-# standardized_phytolith_taxonomy <- standardize_taxonomy(merged_phytolith_counts, microfossil_type = "Phytolith")
-
-# ADD LOGGING:
-processing_log <- log_step(
-  processing_log,
-  step_name = "Taxonomic Standardization",
-  input_data = merged_diatom_counts,
-  output_data = standardized_diatom_taxonomy$data,
-  notes = "Standardized to morphotype-level taxonomy per Jacopo's specifications for diatoms"
-)
-
-# Export taxa list for Jacopo's ecological review
-write.csv(standardized_diatom_taxonomy$taxonomy_summary, 
-          file = paste0(p$data.flagged, "/diatom_taxa_for_jacopo_review.csv"),
-          row.names = FALSE)
-```
-
 ## Integrate Age Data
 ```{r}
 # Link paleo samples with age/depth data from morphology dataset
@@ -275,48 +252,5 @@ p_taxa_abundance <- rioja_diatoms$counts %>%
 
 print(p_taxa_abundance)
 ggsave(paste0(p$results.figures.paleoeco, "top_taxa_abundance.svg"), p_taxa_abundance, width = 10, height = 8)
-```
-
-## Process Multiple Microfossil Types (Optional)
-```{r}
-# If you want to process multiple types in the same workflow:
-process_microfossil_type <- function(paleo_data, metadata_with_ages, type, output_prefix) {
-  cat("\n=== PROCESSING", toupper(type), "===\n")
-  
-  # Merge counts for this type
-  merged_counts <- merge_microscopy_counts(paleo_data, microfossil_type = type)
-  
-  # Create rioja matrix directly (taxonomic standardization handled inline)
-  rioja_matrix <- create_rioja_matrix(
-    merged_counts = merged_counts,
-    metadata_with_ages = metadata_with_ages,
-    min_total_count = 0,
-    min_samples = 1,
-    include_killifish = TRUE
-  )
-  
-  # Export results
-  exported_files <- export_paleo_results(rioja_matrix, 
-                                         output_prefix = paste0(tolower(type), "_analysis"),
-                                         output_dir = p$data.intermediate)
-  
-  return(list(
-    counts = merged_counts,
-    rioja_matrix = rioja_matrix,
-    files = exported_files
-  ))
-}
-
-# Example: Process all available types
-available_types <- unique(paleo$Microfossil_Type)
-results_by_type <- list()
-
-for(type in available_types) {
-  results_by_type[[type]] <- process_microfossil_type(paleo, paleo_with_ages, type, tolower(type))
-}
-
-# Individual results are available as:
-# results_by_type[["Diatom"]]$rioja_matrix
-# results_by_type[["Phytolith"]]$rioja_matrix
 ```
 

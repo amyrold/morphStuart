@@ -10,5 +10,5 @@ PALEO-ECOLOGICAL DATA PROCESSING METADATA
  Min total count threshold: 0 
  Min samples threshold: 1 
  Killifish included: FALSE 
- Export timestamp: 2025-06-10 13:02:07 
+ Export timestamp: 2025-06-10 17:10:17 
  R version: R version 4.3.2 (2023-10-31) 
