@@ -260,7 +260,7 @@ p1 <-ggplot(filtered_metrics, aes(x = relative_diff)) +
        x = "Relative Difference (proportion of scale)",
        y = "Count") +
   theme_minimal()
-ggsave(paste0(p$data.processed, "overlap_relative_differences.svg"), p1, width = 10, height = 6)
+ggsave(paste0(p$results.figures.morphology, "overlap_relative_differences.svg"), p1, width = 10, height = 6)
 
 # Visualization 2: Count of overlaps by measurement type
 overlap_by_measure <- filtered_metrics %>%
@@ -278,7 +278,7 @@ p2 <- ggplot(overlap_by_measure, aes(x = reorder(measure, count), y = count)) +
   labs(title = paste0("Number of fish with duplicate measurements by type", threshold_text),
        x = "Measurement",
        y = "Count of fish with duplicates") 
-ggsave(paste0(p$processed, "/overlaps_by_measure.svg"), p2, width = 10, height = 6)
+ggsave(paste0(p$results.figures.morphology, "overlaps_by_measure.svg"), p2, width = 10, height = 6)
 
 # Visualization 3: Distribution of flags per fish
 p3 <- ggplot(review_results$summary, aes(x = total_diffs)) +
@@ -287,7 +287,7 @@ p3 <- ggplot(review_results$summary, aes(x = total_diffs)) +
   labs(title = paste0("Distribution of duplicate measurements per fish", threshold_text),
        x = "Number of duplicate measurements",
        y = "Count of fish")
-ggsave(paste0(p$processed, "/duplicates_per_fish.svg"), p3, width = 8, height = 6)
+ggsave(paste0(p$results.figures.morphology, "duplicates_per_fish.svg"), p3, width = 8, height = 6)
 
 # Visualization 4: Distribution of differences by variable type
 p4 <- ggplot(filtered_metrics, 
@@ -300,7 +300,7 @@ p4 <- ggplot(filtered_metrics,
        y = "Absolute Difference",
        fill = "Variable Type") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggsave(paste0(p$processed, "/differences_by_variable_type.svg"), p4, width = 10, height = 6)
+ggsave(paste0(p$results.figures.morphology, "differences_by_variable_type.svg"), p4, width = 10, height = 6)
 ```
 #==============================================================================#
 # MERGE AGE ESTIMATES
