@@ -220,108 +220,6 @@ merge_microscopy_counts <- function(paleo, microfossil_type = NULL) {
   return(merged_counts)
 }
 
-# =============================================================================
-# TAXONOMIC STANDARDIZATION
-# =============================================================================
-
-#' Standardize Taxonomy According to Jacopo's Specifications
-#'
-#' Creates standardized taxonomic names following ecological preferences:
-#' - Diatoms: Morphotype-level (not species) for ecological relevance
-#' - Phytoliths: Functional groups (grassy vs woody) when possible
-#' - Fallback to genus level when morphotype unavailable
-#'
-#' @param merged_counts Data frame from merge_microscopy_counts()
-#' @param microfossil_type Type to process ("Diatom", "Phytolith", etc.)
-#' @return List containing standardized data and taxonomy summary
-#'
-#' @examples
-#' # Process diatoms
-#' diatom_taxonomy <- standardize_taxonomy(merged_counts, "Diatom")
-#' 
-#' # Process phytoliths
-#' phytolith_taxonomy <- standardize_taxonomy(merged_counts, "Phytolith")
-standardize_taxonomy <- function(merged_counts, microfossil_type) {
-  # Validate input
-  if (!is.data.frame(merged_counts)) {
-    stop("Input must be a data frame")
-  }
-  if (!"Count" %in% names(merged_counts)) {
-    stop("Input must contain 'Count' column from merge_microscopy_counts()")
-  }
-  if (missing(microfossil_type)) {
-    stop("microfossil_type parameter is required. Specify 'Diatom', 'Phytolith', etc.")
-  }
-  if (!"Microfossil_Type" %in% names(merged_counts)) {
-    stop("Input must contain 'Microfossil_Type' column")
-  }
-  
-  # Check if the specified type exists in the data
-  available_types <- unique(merged_counts$Microfossil_Type)
-  if (!microfossil_type %in% available_types) {
-    stop(paste("Microfossil type", microfossil_type, "not found in data.", 
-               "Available types:", paste(available_types, collapse = ", ")))
-  }
-  
-  cat("=== STANDARDIZING TAXONOMY ===\n")
-  cat("Applying Jacopo's taxonomic preferences for", microfossil_type, "\n")
-  
-  # Filter to specified microfossil type and standardize
-  standardized <- merged_counts %>%
-    filter(Microfossil_Type == microfossil_type) %>%
-    mutate(
-      # Apply Jacopo's hierarchical taxonomic preferences
-      Taxon = case_when(
-        # For diatoms: Prioritize morphotype for ecological relevance
-        microfossil_type == "Diatom" & !is.na(Morphotype) & Morphotype != "" ~ Morphotype,
-        microfossil_type == "Diatom" & !is.na(Genus_Type) & Genus_Type != "" ~ Genus_Type,
-        
-        # For phytoliths: Create functional groups when possible
-        microfossil_type == "Phytolith" & !is.na(Morphotype) & Morphotype != "" ~ Morphotype,
-        
-        # Fallback to genus for any microfossil type
-        !is.na(Genus_Type) & Genus_Type != "" ~ Genus_Type,
-        
-        # Last resort fallback
-        !is.na(Species) & Species != "" ~ paste("sp.", Species),
-        TRUE ~ "Unknown"
-      )
-    ) %>%
-    filter(Taxon != "Unknown")  # Remove unidentifiable taxa
-  
-  # Create comprehensive taxonomic summary for Jacopo's review
-  taxon_summary <- standardized %>%
-    group_by(Taxon) %>%
-    summarise(
-      total_count = sum(Count),
-      n_samples = n_distinct(Sample_ID),
-      avg_count_per_sample = round(total_count / n_samples, 1),
-      max_count_in_sample = max(Count),
-      .groups = "drop"
-    ) %>%
-    arrange(desc(total_count)) %>%
-    mutate(
-      rank = row_number(),
-      cumulative_percent = round(100 * cumsum(total_count) / sum(total_count), 1)
-    )
-  
-  # Summary output
-  cat("Taxonomic standardization complete for", microfossil_type, ":\n")
-  cat("Total taxa after standardization:", nrow(taxon_summary), "\n")
-  cat("Taxa representing 80% of abundance:", sum(taxon_summary$cumulative_percent <= 80), "\n")
-  
-  # Show top taxa for review
-  cat("\nTop 10 taxa by total abundance:\n")
-  print(taxon_summary %>% 
-          select(rank, Taxon, total_count, n_samples, cumulative_percent) %>%
-          slice_head(n = 10))
-  
-  return(list(
-    data = standardized,
-    taxonomy_summary = taxon_summary,
-    microfossil_type = microfossil_type  # Store for downstream use
-  ))
-}
 
 # =============================================================================
 # AGE AND DEPTH INTEGRATION
@@ -330,8 +228,8 @@ standardize_taxonomy <- function(merged_counts, microfossil_type) {
 #' Integrate Age and Depth Data from Morphology Dataset
 #'
 #' Links paleo samples to actual stratigraphic depths (CSTRAT) and ages (YEAR)
-#' using Mike Bell's estimates via LSPEC matching. Creates stratigraphic ordering
-#' for samples with and without age data.
+#' using Mike Bell's estimates via LSPEC matching. Adds age/depth information
+#' to existing sample metadata without creating additional ordering columns.
 #'
 #' @param paleo_metadata Output from extract_paleo_metadata()
 #' @param morph_with_age Morphology dataset containing age/depth estimates
@@ -375,60 +273,28 @@ integrate_age_data <- function(paleo_metadata, morph_with_age) {
   
   # Join paleo metadata with age data
   paleo_with_ages <- paleo_metadata %>%
-    left_join(age_reference, by = "LSPEC", suffix = c("", "_morph")) %>%
-    mutate(
-      # Create stratigraphic ordering for all samples
-      # Extract numeric part from LSPEC for ordering when no CSTRAT available
-      LSPEC_numeric = as.numeric(str_extract(LSPEC, "\\d+")),
-      
-      # Update stratigraphic levels with real data when available
-      strat_level_updated = case_when(
-        !is.na(CSTRAT) ~ CSTRAT,                    # Use real depth when available
-        sample_type == "Stickleback" & !is.na(LSPEC_numeric) ~ LSPEC_numeric,  # Use L-number for ordering
-        sample_type == "Killifish" ~ 9999,          # Place killifish at top
-        TRUE ~ NA_real_
-      ),
-      
-      # Create sample labels for plotting and identification
-      sample_label = case_when(
-        sample_type == "Killifish" ~ paste0("Killifish_", V_number),
-        sample_type == "Stickleback" ~ LSPEC,
-        TRUE ~ Sample_ID
-      ),
-      
-      has_age_data = !is.na(CSTRAT) | !is.na(YEAR),
-      age_quality = case_when(
-        !is.na(CSTRAT) & !is.na(YEAR) ~ "Both depth and age",
-        !is.na(CSTRAT) ~ "Depth only", 
-        !is.na(YEAR) ~ "Age only",
-        TRUE ~ "No age data"
-      )
-    ) %>%
-    # Remove intermediate column
-    select(-LSPEC_numeric)
+    left_join(age_reference, by = "LSPEC", suffix = c("", "_morph"))
   
   # Calculate integration statistics
   integration_summary <- paleo_with_ages %>%
     summarise(
       total_samples = n(),
-      samples_with_age = sum(has_age_data, na.rm = TRUE),
       samples_with_cstrat = sum(!is.na(CSTRAT), na.rm = TRUE),
       samples_with_year = sum(!is.na(YEAR), na.rm = TRUE),
       killifish_samples = sum(sample_type == "Killifish", na.rm = TRUE),
       stickleback_samples = sum(sample_type == "Stickleback", na.rm = TRUE),
-      percent_with_age = round(100 * sum(has_age_data, na.rm = TRUE) / n(), 1)
+      percent_with_cstrat = round(100 * sum(!is.na(CSTRAT), na.rm = TRUE) / n(), 1)
     )
   
   cat("Age integration results:\n")
   cat("Total paleo samples:", integration_summary$total_samples, "\n")
-  cat("Samples with age/depth data:", integration_summary$samples_with_age, 
-      "(", integration_summary$percent_with_age, "%)\n")
-  cat("  - With CSTRAT depth:", integration_summary$samples_with_cstrat, "\n")
-  cat("  - With YEAR age:", integration_summary$samples_with_year, "\n")
+  cat("Samples with CSTRAT depth:", integration_summary$samples_with_cstrat, 
+      "(", integration_summary$percent_with_cstrat, "%)\n")
+  cat("Samples with YEAR age:", integration_summary$samples_with_year, "\n")
   
   # Check for potential linking issues
   missing_age_LSPECs <- paleo_with_ages %>%
-    filter(!has_age_data, sample_type == "Stickleback") %>%
+    filter(is.na(CSTRAT), sample_type == "Stickleback") %>%
     select(LSPEC) %>%
     distinct()
   
@@ -441,7 +307,7 @@ integrate_age_data <- function(paleo_metadata, morph_with_age) {
     data = paleo_with_ages,
     age_reference = age_reference,
     integration_summary = integration_summary,
-    has_age_data = integration_summary$samples_with_age > 0
+    has_age_data = integration_summary$samples_with_cstrat > 0
   ))
 }
 
@@ -454,7 +320,7 @@ integrate_age_data <- function(paleo_metadata, morph_with_age) {
 #' Converts processed paleo data to wide format matrix suitable for rioja
 #' stratigraphic analysis. Final step after all preprocessing is complete.
 #'
-#' @param taxonomic_data Output from standardize_taxonomy()
+#' @param merged_counts Data frame from merge_microscopy_counts()
 #' @param metadata_with_ages Output from integrate_age_data()
 #' @param min_total_count Minimum total abundance to include taxon (default 0)
 #' @param min_samples Minimum number of samples to include taxon (default 1)
@@ -462,14 +328,14 @@ integrate_age_data <- function(paleo_metadata, morph_with_age) {
 #' @return List containing rioja-ready counts matrix and sample information
 #'
 #' @examples
-#' rioja_data <- create_rioja_matrix(taxonomy_result, age_result, 
+#' rioja_data <- create_rioja_matrix(merged_counts, age_result, 
 #'                                   min_total_count = 5, min_samples = 2)
-create_rioja_matrix <- function(taxonomic_data, metadata_with_ages, 
+create_rioja_matrix <- function(merged_counts, metadata_with_ages, 
                                 min_total_count = 0, min_samples = 1,
                                 include_killifish = TRUE) {
   # Validate inputs
-  if (!is.list(taxonomic_data) || !"data" %in% names(taxonomic_data)) {
-    stop("taxonomic_data must be output from standardize_taxonomy()")
+  if (!is.data.frame(merged_counts)) {
+    stop("merged_counts must be output from merge_microscopy_counts()")
   }
   if (!is.list(metadata_with_ages) || !"data" %in% names(metadata_with_ages)) {
     stop("metadata_with_ages must be output from integrate_age_data()")
@@ -489,8 +355,30 @@ create_rioja_matrix <- function(taxonomic_data, metadata_with_ages,
     cat("Including all sample types\n")
   }
   
+  # Create standardized taxon names inline
+  counts_with_taxa <- merged_counts %>%
+    mutate(
+      # Simple taxonomic hierarchy: use Morphotype if available, otherwise Genus_Type
+      Taxon = case_when(
+        !is.na(Morphotype) & Morphotype != "" ~ Morphotype,
+        !is.na(Genus_Type) & Genus_Type != "" ~ Genus_Type,
+        !is.na(Species) & Species != "" ~ paste("sp.", Species),
+        TRUE ~ "Unknown"
+      )
+    ) %>%
+    filter(Taxon != "Unknown")  # Remove unidentifiable taxa
+  
+  # Calculate taxa filtering criteria
+  taxa_summary <- counts_with_taxa %>%
+    group_by(Taxon) %>%
+    summarise(
+      total_count = sum(Count),
+      n_samples = n_distinct(Sample_ID),
+      .groups = "drop"
+    )
+  
   # Filter taxa based on abundance criteria
-  taxa_to_include <- taxonomic_data$taxonomy_summary %>%
+  taxa_to_include <- taxa_summary %>%
     filter(total_count >= min_total_count, n_samples >= min_samples) %>%
     pull(Taxon)
   
@@ -501,12 +389,11 @@ create_rioja_matrix <- function(taxonomic_data, metadata_with_ages,
   }
   
   # Join data and convert to wide format
-  rioja_wide <- taxonomic_data$data %>%
+  rioja_wide <- counts_with_taxa %>%
     filter(Taxon %in% taxa_to_include) %>%
     inner_join(samples_to_include, by = "Sample_ID") %>%
     # Final aggregation step to handle any remaining duplicates
-    group_by(Sample_ID, Taxon, strat_level_updated, sample_type, sample_label, 
-             V_number, LSPEC, CSTRAT, YEAR, has_age_data, age_quality) %>%
+    group_by(Sample_ID, Taxon, V_number, LSPEC, sample_type, CSTRAT, YEAR) %>%
     summarise(Count = sum(Count), .groups = "drop") %>%
     # Convert to wide format (samples as rows, taxa as columns)
     pivot_wider(
@@ -514,20 +401,19 @@ create_rioja_matrix <- function(taxonomic_data, metadata_with_ages,
       values_from = Count,
       values_fill = 0
     ) %>%
-    # Sort by stratigraphic position (oldest first, killifish at top)
-    arrange(desc(strat_level_updated))
+    # Sort by stratigraphic position using CSTRAT when available
+    arrange(desc(CSTRAT))
   
   # Separate sample metadata from count matrix
   sample_info <- rioja_wide %>%
-    select(Sample_ID, strat_level = strat_level_updated, sample_type, sample_label, 
-           V_number, LSPEC, CSTRAT, YEAR, has_age_data, age_quality)
+    select(Sample_ID, V_number, LSPEC, sample_type, CSTRAT, YEAR)
   
   count_matrix <- rioja_wide %>%
     select(all_of(taxa_to_include)) %>%
     as.data.frame()
   
-  # Set row names for rioja compatibility
-  rownames(count_matrix) <- sample_info$sample_label
+  # Set row names using LSPEC as sample identifier
+  rownames(count_matrix) <- sample_info$LSPEC
   
   # Calculate matrix statistics
   total_specimens <- sum(count_matrix)
@@ -543,7 +429,11 @@ create_rioja_matrix <- function(taxonomic_data, metadata_with_ages,
     samples = sample_info,
     taxa_included = taxa_to_include,
     has_age_data = metadata_with_ages$has_age_data,
-    microfossil_type = taxonomic_data$data$Microfossil_Type[1],
+    microfossil_type = if(length(unique(merged_counts$Microfossil_Type)) == 1) {
+      unique(merged_counts$Microfossil_Type)[1]
+    } else {
+      "Multiple"
+    },
     filtering_criteria = list(
       min_total_count = min_total_count,
       min_samples = min_samples,
@@ -880,9 +770,6 @@ validate_paleo_data <- function(original_paleo, rioja_data, processing_steps) {
 #' 2. Taxa list ranked by abundance for ecological grouping review
 #' 3. Sample metadata for linking with morphology and age data
 #'
-#' This function provides a simplified alternative to export_for_jacopo() with
-#' cleaner output structure and consistent naming conventions.
-#'
 #' @param rioja_data Output from create_rioja_matrix() containing counts matrix and sample info
 #' @param output_prefix Character prefix for output filenames (default "paleo_analysis")
 #' @param output_dir Optional output directory path (default current directory)
@@ -916,16 +803,16 @@ export_paleo_results <- function(rioja_data, output_prefix = "paleo_analysis",
   file_paths <- list()
   
   # 1. Main summary table for analysis (taxa as columns, samples as rows)
+  # Use LSPEC as the row identifier and include all essential sample info
   summary_table <- rioja_data$counts %>%
-    tibble::rownames_to_column("sample_label") %>%
+    tibble::rownames_to_column("LSPEC") %>%
     left_join(
       rioja_data$samples %>% 
-        select(sample_label, Sample_ID, V_number, sample_type, LSPEC, CSTRAT, YEAR),
-      by = "sample_label"
+        select(LSPEC, Sample_ID, V_number, sample_type, CSTRAT, YEAR),
+      by = "LSPEC"
     ) %>%
-    select(Sample_ID, V_number, LSPEC, sample_type, CSTRAT, YEAR, 
-           everything(), -sample_label) %>%
-    arrange(desc(CSTRAT))  # Sort by stratigraphic depth
+    select(LSPEC, Sample_ID, V_number, sample_type, CSTRAT, YEAR, everything()) %>%
+    arrange(desc(CSTRAT))  # Sort by stratigraphic depth (deepest first)
   
   file_paths$summary_table <- file.path(output_dir, 
                                         paste0(output_prefix, "_summary_table.csv"))
@@ -951,7 +838,7 @@ export_paleo_results <- function(rioja_data, output_prefix = "paleo_analysis",
   
   # 3. Sample metadata for linking and reference
   sample_info <- rioja_data$samples %>%
-    arrange(V_number) %>%
+    arrange(LSPEC) %>%
     mutate(
       notes = case_when(
         is.na(V_number) ~ "No V-number for morphology linking",
@@ -965,11 +852,46 @@ export_paleo_results <- function(rioja_data, output_prefix = "paleo_analysis",
                                       paste0(output_prefix, "_sample_info.csv"))
   write.csv(sample_info, file_paths$sample_info, row.names = FALSE)
   
+  # 4. Processing metadata for reproducibility
+  processing_metadata <- list(
+    microfossil_type = rioja_data$microfossil_type,
+    n_samples = nrow(rioja_data$samples),
+    n_taxa = ncol(rioja_data$counts),
+    samples_with_cstrat = sum(!is.na(rioja_data$samples$CSTRAT)),
+    samples_with_year = sum(!is.na(rioja_data$samples$YEAR)),
+    killifish_samples = sum(rioja_data$samples$sample_type == "Killifish", na.rm = TRUE),
+    stickleback_samples = sum(rioja_data$samples$sample_type == "Stickleback", na.rm = TRUE),
+    filtering_criteria = rioja_data$filtering_criteria,
+    export_timestamp = Sys.time(),
+    r_version = R.version.string
+  )
+  
+  file_paths$metadata <- file.path(output_dir, 
+                                   paste0(output_prefix, "_processing_metadata.txt"))
+  
+  # Write metadata as readable text
+  cat(file = file_paths$metadata,
+      "PALEO-ECOLOGICAL DATA PROCESSING METADATA\n",
+      "=========================================\n\n",
+      "Microfossil type:", processing_metadata$microfossil_type, "\n",
+      "Final matrix dimensions:", processing_metadata$n_samples, "samples ×", 
+      processing_metadata$n_taxa, "taxa\n",
+      "Samples with CSTRAT depth:", processing_metadata$samples_with_cstrat, "\n",
+      "Samples with YEAR age:", processing_metadata$samples_with_year, "\n",
+      "Killifish samples:", processing_metadata$killifish_samples, "\n",
+      "Stickleback samples:", processing_metadata$stickleback_samples, "\n",
+      "Min total count threshold:", processing_metadata$filtering_criteria$min_total_count, "\n",
+      "Min samples threshold:", processing_metadata$filtering_criteria$min_samples, "\n",
+      "Killifish included:", processing_metadata$filtering_criteria$include_killifish, "\n",
+      "Export timestamp:", format(processing_metadata$export_timestamp, "%Y-%m-%d %H:%M:%S"), "\n",
+      "R version:", processing_metadata$r_version, "\n")
+  
   # Summary output
   cat("Files exported:\n")
   cat("1. Summary table (main data):", basename(file_paths$summary_table), "\n")
   cat("2. Taxa list (for grouping):", basename(file_paths$taxa_list), "\n")
   cat("3. Sample metadata:", basename(file_paths$sample_info), "\n")
+  cat("4. Processing metadata:", basename(file_paths$metadata), "\n")
   
   return(file_paths)
 }

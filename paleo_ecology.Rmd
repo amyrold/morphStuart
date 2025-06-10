@@ -226,7 +226,7 @@ merged_all_counts <- merge_microscopy_counts(paleo)
 merged_diatom_counts <- merge_microscopy_counts(paleo, microfossil_type = "Diatom")
 
 # Option 3: Process only phytoliths (example)
-# merged_phytolith_counts <- merge_microscopy_counts(paleo, microfossil_type = "Phytolith")
+merged_phytolith_counts <- merge_microscopy_counts(paleo, microfossil_type = "Phytolith")
 
 # For this example, let's continue with diatoms to match the original workflow
 # ADD LOGGING:
@@ -278,32 +278,153 @@ processing_log <- log_step(
                 "out of", paleo_with_ages$integration_summary$total_samples, "samples")
 )
 
-# Validation check for age integration
-if(paleo_with_ages$integration_summary$samples_with_age == 0) {
-  warning("No samples successfully linked with age data - check bin formatting")
-}
 ```
 
 ## Create Rioja Matrix
 ```{r}
-# Convert to rioja-compatible format
+# Convert to rioja-compatible format (taxonomic standardization handled inline)
 rioja_diatoms <- create_rioja_matrix(
-  taxonomic_data = standardized_diatom_taxonomy,
+  merged_counts = merged_diatom_counts,
   metadata_with_ages = paleo_with_ages,
-  min_total_count = 0,  # Include all taxa initially per Jacopo's request
+  min_total_count = 0,  # Include all taxa initially
   min_samples = 1,
-  include_killifish = TRUE
+  include_killifish = FALSE
 )
 
 # ADD LOGGING:
 processing_log <- log_step(
   processing_log,
   step_name = "Rioja Matrix Creation",
-  input_data = standardized_diatom_taxonomy$data,
+  input_data = merged_diatom_counts,
   output_data = rioja_diatoms$counts,
   notes = paste("Created", nrow(rioja_diatoms$counts), "×", ncol(rioja_diatoms$counts), 
                 "matrix for stratigraphic analysis")
 )
+
+# Export taxa list for review (generated from rioja matrix)
+taxa_for_review <- data.frame(
+  Taxon = rioja_diatoms$taxa_included,
+  total_abundance = colSums(rioja_diatoms$counts),
+  n_samples = colSums(rioja_diatoms$counts > 0),
+  stringsAsFactors = FALSE
+) %>%
+  arrange(desc(total_abundance)) %>%
+  mutate(rank = row_number())
+
+write.csv(taxa_for_review, 
+          file = paste0(p$`1.data/c.flagged`, "/diatom_taxa_for_review.csv"),
+          row.names = FALSE)
+```
+
+## Rioja Stratigraphic Analysis and Plots
+```{r Rioja Stratigraphic Plots}
+# Check if we have samples with CSTRAT depth data for plotting
+if(rioja_diatoms$has_age_data) {
+  
+  # Prepare data for plotting
+  count_matrix <- rioja_diatoms$counts
+  sample_info <- rioja_diatoms$samples
+  depth_var <- sample_info$CSTRAT
+  
+  valid_samples <- !is.na(depth_var)
+  plot_matrix <- count_matrix[valid_samples, ]
+  plot_depths <- depth_var[valid_samples]
+  
+  # Simple stratigraphic plot
+  svg(paste0(p$`3.outputs`, "simple_diatom_diagram.svg"), 
+      width = 12, height = 8)
+  
+  # Minimal parameters to avoid conflicts
+  strat.plot(
+    plot_matrix[, 1:min(11, ncol(plot_matrix))],  # Limit to 11 taxa for clarity
+    yvar = plot_depths,
+    y.rev = TRUE,
+    scale.percent = TRUE
+  )
+  
+  dev.off()
+  
+  # Add clustering in separate step if we have enough samples
+  if(nrow(plot_matrix) > 3) {
+    diss <- dist(sqrt(plot_matrix/rowSums(plot_matrix)))
+    clust <- chclust(diss, method = "coniss")
+    
+    svg(paste0(p$`3.outputs`, "diatom_with_clustering.svg"), 
+        width = 14, height = 10)
+    
+    strat_plot <- strat.plot(
+      plot_matrix[, 1:min(10, ncol(plot_matrix))],
+      yvar = plot_depths,
+      y.rev = TRUE,
+      scale.percent = TRUE,
+      clust = clust
+    )
+    
+    dev.off()
+  }
+  
+  cat("Stratigraphic plots created successfully!\n")
+} else {
+  cat("No samples with CSTRAT depth data available for stratigraphic plotting\n")
+}
+```
+
+## Export Results
+```{r}
+# Export in format for analysis
+exported_files <- export_paleo_results(rioja_diatoms, 
+                                       output_prefix = "diatom_analysis",
+                                       output_dir = p$`1.data/b.merged`)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Paleo Results Export",
+  input_data = rioja_diatoms$counts,
+  files_created = unlist(exported_files),
+  notes = "Exported summary tables and taxa lists for analysis"
+)
+
+cat("Paleo-ecological data processing complete!\n")
+cat("Files ready for analysis and review.\n")
+```
+
+## Quality Assessment Report
+```{r}
+# Create quality report matching morphology pipeline
+paleo_quality <- create_quality_report(rioja_diatoms$counts, 
+                                       output_dir = paste0(p$`4.docs`, "reports"))
+
+# Summary visualization - check if CSTRAT data exists
+if(!is.null(rioja_diatoms$samples$CSTRAT) && sum(!is.na(rioja_diatoms$samples$CSTRAT)) > 0) {
+  # Sample distribution through time
+  p_sample_dist <- ggplot(rioja_diatoms$samples %>% filter(!is.na(CSTRAT)), 
+                         aes(x = CSTRAT, fill = sample_type)) +
+    geom_histogram(bins = 20, alpha = 0.7) +
+    labs(title = "Sample Distribution Through Stratigraphic Section",
+         x = "Stratigraphic Depth (cm)", y = "Number of Samples") +
+    theme_minimal()
+  
+  print(p_sample_dist)
+  ggsave(paste0(p$`3.outputs`, "paleo_sample_distribution.svg"), p_sample_dist, width = 8, height = 6)
+}
+
+# Taxa abundance distribution
+p_taxa_abundance <- rioja_diatoms$counts %>%
+  colSums() %>%
+  data.frame(abundance = .) %>%
+  rownames_to_column("taxon") %>%
+  arrange(desc(abundance)) %>%
+  slice_head(n = 20) %>%
+  ggplot(aes(x = reorder(taxon, abundance), y = abundance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 20 Diatom Taxa by Abundance",
+       x = "Taxon", y = "Total Count") +
+  theme_minimal()
+
+print(p_taxa_abundance)
+ggsave(paste0(p$`3.outputs`, "top_taxa_abundance.svg"), p_taxa_abundance, width = 10, height = 8)
 ```
 
 ## Process Multiple Microfossil Types (Optional)
@@ -315,12 +436,9 @@ process_microfossil_type <- function(paleo_data, metadata_with_ages, type, outpu
   # Merge counts for this type
   merged_counts <- merge_microscopy_counts(paleo_data, microfossil_type = type)
   
-  # Standardize taxonomy
-  standardized_taxonomy <- standardize_taxonomy(merged_counts, microfossil_type = type)
-  
-  # Create rioja matrix
+  # Create rioja matrix directly (taxonomic standardization handled inline)
   rioja_matrix <- create_rioja_matrix(
-    taxonomic_data = standardized_taxonomy,
+    merged_counts = merged_counts,
     metadata_with_ages = metadata_with_ages,
     min_total_count = 0,
     min_samples = 1,
@@ -334,7 +452,6 @@ process_microfossil_type <- function(paleo_data, metadata_with_ages, type, outpu
   
   return(list(
     counts = merged_counts,
-    taxonomy = standardized_taxonomy,
     rioja_matrix = rioja_matrix,
     files = exported_files
   ))

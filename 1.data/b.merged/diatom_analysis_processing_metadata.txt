@@ -1,0 +1,14 @@
+PALEO-ECOLOGICAL DATA PROCESSING METADATA
+ =========================================
+
+ Microfossil type: Diatom 
+ Final matrix dimensions: 40 samples × 11 taxa
+ Samples with CSTRAT depth: 24 
+ Samples with YEAR age: 24 
+ Killifish samples: 0 
+ Stickleback samples: 40 
+ Min total count threshold: 0 
+ Min samples threshold: 1 
+ Killifish included: FALSE 
+ Export timestamp: 2025-06-10 13:02:07 
+ R version: R version 4.3.2 (2023-10-31) 
