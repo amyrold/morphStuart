@@ -386,10 +386,11 @@ age_formatted <- age_formatted_clean
 ```{r Merge Age Data}
 # Merge age data with the processed morphological data
 # Assuming you have your merged_non_overlap data from the previous processing
+age_formatted <- read.csv(paste0(p$data.intermediate, ""))
 
 # Read the merged morphological data if not already in memory
 if (!exists("merged_non_overlap")) {
-  merged_non_overlap <- read.csv(paste0(p$data.intermediate, "/merged_non_overlap.csv"))
+  merged_non_overlap <- read.csv(paste0(p$data.intermediate, "merged_non_overlap.csv"))
 }
 
 # Perform the merge

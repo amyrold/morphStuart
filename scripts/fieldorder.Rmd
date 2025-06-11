@@ -19,35 +19,90 @@ setup_project('config.yaml')
 
 #==============================================================================#
 # CLEAN FIELDORDER DATA
-## Format Age Data
+## Data Import and Initial Processing
+```{r Data Import}
+# Read age data with explicit handling of missing value indicators
+age_raw <- read.csv(paste0(p$data.raw, "PitLMorph_fieldorder.csv"), 
+                    stringsAsFactors = FALSE, na.strings = c("", ".", "NA"))
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log, 
+  step_name = "Field Order Data Import",
+  input_data = age_raw,
+  notes = "Initial import of field order data with explicit NA handling for '.'"
+)
+
+# Initial data assessment
+cat("Raw field order data structure:\n")
+cat("Total rows:", nrow(age_raw), "\n")
+cat("Total columns:", ncol(age_raw), "\n")
+cat("Unique L..SPEC values:", length(unique(age_raw$L..SPEC)), "\n")
+
+# Check for missing value patterns in raw data
+missing_summary_raw <- age_raw %>%
+  summarise(
+    across(everything(), ~sum(is.na(.)), .names = "missing_{.col}"),
+    .groups = "drop"
+  )
+
+cat("\nMissing values in raw data:\n")
+print(missing_summary_raw)
+```
+
+## Format and Standardize Data
 ```{r Format Age Data}
-# Read age data (assuming it's already loaded as 'age')
-age <- read.csv(paste0(p$data.raw, "PitLMorph_fieldorder.csv"))
-
-raw_specs <- unique(age$L..SPEC)
-
-# Convert L..SPEC to match LSPEC formatting, handling decimal suffixes
-age_formatted <- age %>%
+# Convert and standardize the age data
+age_formatted <- age_raw %>%
   mutate(
-    L_SPEC_clean = `L..SPEC`,
+    L_SPEC_original = `L..SPEC`,
     # Extract base number (before any decimal) for standardized LSPEC
-    LSPEC_base_number = str_extract(as.character(L_SPEC_clean), "^\\d+"),
-    LSPEC = paste0("L", str_pad(LSPEC_base_number, 4, pad = "0")),
-    # Convert relevant columns to numeric for analysis
+    LSPEC_base_number = str_extract(as.character(L_SPEC_original), "^\\d+"),
+    LSPEC = case_when(
+      !is.na(LSPEC_base_number) ~ paste0("L", str_pad(LSPEC_base_number, 4, pad = "0")),
+      TRUE ~ NA_character_
+    ),
+    # Convert relevant columns to numeric (already handled by na.strings in read.csv)
     CSTRAT = as.numeric(CSTRAT),
     ISTRAT = as.numeric(ISTRAT), 
     YEAR = as.numeric(YEAR),
     INT = as.numeric(INT)
   ) %>%
-  # Keep original L_SPEC for validation, then select needed columns
-  select(L_SPEC_original = L_SPEC_clean, LSPEC, CSTRAT, ISTRAT, YEAR, INT) %>%
+  # Select only the columns we need for analysis
+  select(L_SPEC_original, LSPEC, CSTRAT, ISTRAT, YEAR, INT) %>%
   # Remove any rows where LSPEC couldn't be created
   filter(!is.na(LSPEC), LSPEC != "LNA")
 
-clean_specs <- unique(age_formatted$L_SPEC_original)
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Data Formatting", 
+  input_data = age_raw,
+  output_data = age_formatted,
+  notes = "Formatted LSPEC and converted numeric columns"
+)
 
-# VALIDATION: Check that decimal suffix duplicates have identical key column values
-duplicate_validation <- age_formatted %>%
+# Assess data quality after formatting
+data_quality_summary <- age_formatted %>%
+  summarise(
+    total_records = n(),
+    unique_lspecs = n_distinct(LSPEC),
+    missing_cstrat = sum(is.na(CSTRAT)),
+    missing_istrat = sum(is.na(ISTRAT)),
+    missing_year = sum(is.na(YEAR)),
+    missing_int = sum(is.na(INT)),
+    any_missing_key_data = sum(is.na(CSTRAT) & is.na(ISTRAT) & is.na(YEAR)),
+    .groups = "drop"
+  )
+
+cat("\nData quality after formatting:\n")
+print(data_quality_summary)
+```
+
+## Identify and Handle Duplicates
+```{r Handle Duplicates}
+# Identify duplicates and check for conflicts
+duplicate_analysis <- age_formatted %>%
   group_by(LSPEC) %>%
   filter(n() > 1) %>%
   summarise(
@@ -57,48 +112,324 @@ duplicate_validation <- age_formatted %>%
     unique_ISTRAT = n_distinct(ISTRAT, na.rm = TRUE),
     unique_YEAR = n_distinct(YEAR, na.rm = TRUE),
     unique_INT = n_distinct(INT, na.rm = TRUE),
+    # Check if values are actually different (not just missing)
+    conflicting_CSTRAT = length(unique(CSTRAT[!is.na(CSTRAT)])) > 1,
+    conflicting_ISTRAT = length(unique(ISTRAT[!is.na(ISTRAT)])) > 1,
+    conflicting_YEAR = length(unique(YEAR[!is.na(YEAR)])) > 1,
+    conflicting_INT = length(unique(INT[!is.na(INT)])) > 1,
     .groups = "drop"
+  ) %>%
+  mutate(
+    has_real_conflicts = conflicting_CSTRAT | conflicting_ISTRAT | 
+                        conflicting_YEAR | conflicting_INT
   )
 
-# Check if any duplicates have different values in key columns
-problematic_duplicates <- duplicate_validation %>%
-  filter(unique_CSTRAT > 1 | unique_ISTRAT > 1 | unique_YEAR > 1 | unique_INT > 1)
+# Identify truly problematic duplicates (with actual conflicting values)
+problematic_duplicates <- duplicate_analysis %>%
+  filter(has_real_conflicts)
+
+problematic_lspecs <- problematic_duplicates$LSPEC
+
+# Report duplicate findings
+cat("\nDuplicate analysis results:\n")
+cat("Total LSPEC duplicates found:", nrow(duplicate_analysis), "\n")
+cat("LSPEC with conflicting values:", nrow(problematic_duplicates), "\n")
 
 if(nrow(problematic_duplicates) > 0) {
-  cat("⚠️ WARNING: Found", nrow(problematic_duplicates), "LSPECs with different values in key columns:\n")
-  print(problematic_duplicates)
-  cat("Manual review required for these specimens.\n")
+  cat("⚠️ WARNING: Found", nrow(problematic_duplicates), "LSPECs with conflicting values:\n")
+  print(problematic_duplicates %>% select(LSPEC, original_specs, has_real_conflicts))
 } else {
-  cat("✅ Validation passed: All duplicate LSPECs have identical values for key columns\n")
-  if(nrow(duplicate_validation) > 0) {
-    cat("   Found", nrow(duplicate_validation), "sets of duplicates with identical values\n")
-    cat("   Example duplicates:", head(duplicate_validation$original_specs, 3), "\n")
+  cat("✅ No conflicting duplicates found\n")
+  if(nrow(duplicate_analysis) > 0) {
+    cat("   Found", nrow(duplicate_analysis), "sets of duplicates with identical values\n")
   }
 }
 
-# Remove problematic LSPECs, then deduplicate the clean ones
-problematic_lspecs <- problematic_duplicates$LSPEC
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Duplicate Analysis",
+  input_data = age_formatted,
+  notes = paste("Found", nrow(duplicate_analysis), "duplicate sets,", 
+                nrow(problematic_duplicates), "with conflicts")
+)
+```
 
+## Create Clean Dataset
+```{r Create Clean Dataset}
+# Remove problematic LSPECs and deduplicate clean ones
 age_formatted_filtered <- age_formatted %>%
   filter(!LSPEC %in% problematic_lspecs)
 
-problematic <- age_formatted %>%
-  filter(LSPEC %in% problematic_lspecs)
-
-# Remove duplicates (keep first occurrence since values are identical)
+# Deduplicate: keep first occurrence since values are identical for clean duplicates
 age_formatted_clean <- age_formatted_filtered %>%
-  select(-L_SPEC_original) %>%
+  select(-L_SPEC_original) %>%  # Remove original spec column for clean dataset
   distinct(LSPEC, .keep_all = TRUE)
 
-# Report on cleaning
-cat("Age data cleaning summary:\n")
-cat("  Original records:", nrow(age_formatted), "\n")
-cat("  Problematic LSPECs removed:", length(problematic_lspecs), "LSPECs,", 
-    nrow(age_formatted) - nrow(age_formatted_filtered), "records\n")
-cat("  After deduplication:", nrow(age_formatted_clean), "\n")
-cat("  Total records removed:", nrow(age_formatted) - nrow(age_formatted_clean), "\n")
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Clean Dataset Creation",
+  input_data = age_formatted_filtered,
+  output_data = age_formatted_clean,
+  notes = paste("Created clean dataset with", nrow(age_formatted_clean), "unique LSPECs")
+)
 
-# Save the cleaned data
-write.csv(age_formatted_clean, file = paste0(p$data.intermediate, "clean_fieldorder.csv"))
+# Report on cleaning process
+cleaning_summary <- list(
+  original_records = nrow(age_formatted),
+  problematic_lspecs_removed = length(problematic_lspecs),
+  problematic_records_removed = nrow(age_formatted) - nrow(age_formatted_filtered),
+  after_deduplication = nrow(age_formatted_clean),
+  total_records_removed = nrow(age_formatted) - nrow(age_formatted_clean)
+)
 
+cat("\nField order data cleaning summary:\n")
+cat("  Original records:", cleaning_summary$original_records, "\n")
+cat("  Problematic LSPECs removed:", cleaning_summary$problematic_lspecs_removed, "LSPECs,", 
+    cleaning_summary$problematic_records_removed, "records\n")
+cat("  After deduplication:", cleaning_summary$after_deduplication, "\n")
+cat("  Total records removed:", cleaning_summary$total_records_removed, "\n")
+```
+
+## Identify Records with Missing Data
+```{r Identify Missing Data}
+# Find records with any missing data in key columns
+records_with_missing <- age_formatted_clean %>%
+  # Add row identifier for tracking
+  mutate(row_id = row_number()) %>%
+  # Check for missing values in key columns
+  filter(rowSums(is.na(select(., CSTRAT, ISTRAT, YEAR, INT))) > 0) %>%
+  mutate(
+    missing_CSTRAT = is.na(CSTRAT),
+    missing_ISTRAT = is.na(ISTRAT),
+    missing_YEAR = is.na(YEAR),
+    missing_INT = is.na(INT),
+    missing_count = rowSums(is.na(select(., CSTRAT, ISTRAT, YEAR, INT))),
+    missing_columns = pmap_chr(list(missing_CSTRAT, missing_ISTRAT, missing_YEAR, missing_INT),
+                               function(c, i, y, int) {
+                                 missing_cols <- c()
+                                 if(c) missing_cols <- c(missing_cols, "CSTRAT")
+                                 if(i) missing_cols <- c(missing_cols, "ISTRAT")
+                                 if(y) missing_cols <- c(missing_cols, "YEAR")
+                                 if(int) missing_cols <- c(missing_cols, "INT")
+                                 paste(missing_cols, collapse = ", ")
+                               })
+  ) %>%
+  select(-row_id)
+
+# Get corresponding records from original formatted data (with L_SPEC_original)
+records_with_missing_detailed <- age_formatted %>%
+  filter(LSPEC %in% records_with_missing$LSPEC) %>%
+  left_join(records_with_missing %>% select(LSPEC, missing_count, missing_columns), 
+            by = "LSPEC")
+
+cat("\nMissing data analysis:\n")
+cat("Records with any missing data:", nrow(records_with_missing), "\n")
+cat("Percentage of clean dataset:", round(100 * nrow(records_with_missing) / nrow(age_formatted_clean), 1), "%\n")
+
+if(nrow(records_with_missing) > 0) {
+  missing_pattern_summary <- records_with_missing %>%
+    count(missing_columns, missing_count, sort = TRUE) %>%
+    mutate(percentage = round(100 * n / nrow(records_with_missing), 1))
+  
+  cat("\nMissing data patterns:\n")
+  print(missing_pattern_summary)
+}
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Missing Data Analysis",
+  input_data = age_formatted_clean,
+  notes = paste("Identified", nrow(records_with_missing), "records with missing data")
+)
+```
+
+## Create Flagged Dataset for Review
+```{r Create Flagged Dataset}
+# Combine problematic duplicates and missing data records for flagging
+problematic_records <- age_formatted %>%
+  filter(LSPEC %in% problematic_lspecs) %>%
+  mutate(
+    flag_reason = "Conflicting duplicate values",
+    flag_category = "Duplicate conflicts"
+  )
+
+missing_data_records <- records_with_missing_detailed %>%
+  mutate(
+    flag_reason = paste("Missing data in:", missing_columns),
+    flag_category = "Missing data"
+  )
+
+# Combine all flagged records
+fieldorder_flagged <- bind_rows(
+  problematic_records,
+  missing_data_records
+) %>%
+  arrange(LSPEC, flag_category) %>%
+  # Add summary columns for review
+  mutate(
+    needs_manual_review = flag_category == "Duplicate conflicts",
+    can_proceed_with_caution = flag_category == "Missing data",
+    review_priority = case_when(
+      flag_category == "Duplicate conflicts" ~ "High",
+      missing_count >= 3 ~ "Medium", 
+      TRUE ~ "Low"
+    )
+  )
+
+# Export flagged dataset
+flagged_file <- paste0(p$data.flagged, "fieldorder_flagged.csv")
+write.csv(fieldorder_flagged, file = flagged_file, row.names = FALSE)
+
+# Create summary of flagged data
+flagged_summary <- fieldorder_flagged %>%
+  count(flag_category, review_priority, sort = TRUE) %>%
+  mutate(percentage = round(100 * n / nrow(fieldorder_flagged), 1))
+
+cat("\nFlagged records summary:\n")
+print(flagged_summary)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Flagged Dataset Creation",
+  input_data = bind_rows(problematic_records, records_with_missing_detailed),
+  output_data = fieldorder_flagged,
+  files_created = flagged_file,
+  notes = paste("Created flagged dataset with", nrow(fieldorder_flagged), "records for review")
+)
+```
+
+## Export Clean Dataset
+```{r Export Clean Dataset}
+# Export the clean dataset for use in downstream analyses
+clean_file <- paste0(p$data.intermediate, "age_formatted_clean.csv")
+write.csv(age_formatted_clean, file = clean_file, row.names = FALSE)
+
+# Create final summary report
+final_summary <- list(
+  processing_date = Sys.time(),
+  input_file = "PitLMorph_fieldorder.csv",
+  total_input_records = nrow(age_raw),
+  total_clean_records = nrow(age_formatted_clean),
+  total_flagged_records = nrow(fieldorder_flagged),
+  unique_lspecs_clean = n_distinct(age_formatted_clean$LSPEC),
+  data_completeness = list(
+    cstrat_available = sum(!is.na(age_formatted_clean$CSTRAT)),
+    istrat_available = sum(!is.na(age_formatted_clean$ISTRAT)),
+    year_available = sum(!is.na(age_formatted_clean$YEAR)),
+    int_available = sum(!is.na(age_formatted_clean$INT))
+  ),
+  files_created = list(
+    clean_data = clean_file,
+    flagged_data = flagged_file
+  )
+)
+
+# Save processing summary
+summary_file <- paste0(p$data.processed, "fieldorder_processing_summary.rds")
+saveRDS(final_summary, file = summary_file)
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Final Export",
+  input_data = age_formatted_clean,
+  files_created = c(clean_file, summary_file),
+  notes = "Exported clean dataset and processing summary"
+)
+
+# EXPORT COMPREHENSIVE PROCESSING LOG:
+log_files <- export_log(processing_log, output_dir = p$docs.logs)
+
+cat("\n" , paste(rep("=", 60), collapse = ""), "\n")
+cat("FIELD ORDER DATA CLEANING COMPLETE\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+cat("Clean dataset:", clean_file, "\n")
+cat("Flagged dataset:", flagged_file, "\n")
+cat("Processing summary:", summary_file, "\n")
+cat("Processing logs:", paste(unlist(log_files), collapse = ", "), "\n")
+cat("\nFinal data overview:\n")
+cat("  Clean records ready for analysis:", nrow(age_formatted_clean), "\n")
+cat("  Records flagged for review:", nrow(fieldorder_flagged), "\n")
+cat("  Data retention rate:", round(100 * nrow(age_formatted_clean) / nrow(age_raw), 1), "%\n")
+cat(paste(rep("=", 60), collapse = ""), "\n")
+```
+
+## Quality Assessment Visualizations
+```{r Quality Visualizations}
+# Create visualizations to understand the field order data quality
+
+# 1. Data completeness by column
+completeness_data <- age_formatted_clean %>%
+  summarise(
+    across(c(CSTRAT, ISTRAT, YEAR, INT), ~sum(!is.na(.)), .names = "complete_{.col}"),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(everything(), names_to = "column", values_to = "complete_count") %>%
+  mutate(
+    column = str_remove(column, "complete_"),
+    percentage_complete = round(100 * complete_count / nrow(age_formatted_clean), 1)
+  )
+
+p1 <- ggplot(completeness_data, aes(x = column, y = percentage_complete)) +
+  geom_bar(stat = "identity", fill = "steelblue", alpha = 0.7) +
+  geom_text(aes(label = paste0(percentage_complete, "%")), vjust = -0.5) +
+  labs(title = "Data Completeness by Column",
+       x = "Column", y = "Percentage Complete") +
+  theme_minimal() +
+  ylim(0, 105)
+
+# 2. Distribution of stratigraphic levels
+if(sum(!is.na(age_formatted_clean$CSTRAT)) > 0) {
+  p2 <- ggplot(age_formatted_clean %>% filter(!is.na(CSTRAT)), 
+               aes(x = CSTRAT)) +
+    geom_histogram(bins = 30, fill = "lightgreen", alpha = 0.7, color = "black") +
+    labs(title = "Distribution of Stratigraphic Levels (CSTRAT)",
+         x = "CSTRAT (cm)", y = "Number of Records") +
+    theme_minimal()
+  
+  # 3. Age distribution if available
+  if(sum(!is.na(age_formatted_clean$YEAR)) > 0) {
+    p3 <- ggplot(age_formatted_clean %>% filter(!is.na(YEAR)), 
+                 aes(x = YEAR)) +
+      geom_histogram(bins = 30, fill = "lightcoral", alpha = 0.7, color = "black") +
+      labs(title = "Distribution of Ages (YEAR)",
+           x = "Age (years)", y = "Number of Records") +
+      theme_minimal() +
+      scale_x_continuous(labels = scales::comma)
+    
+    # 4. Relationship between CSTRAT and YEAR if both available
+    combined_data <- age_formatted_clean %>% 
+      filter(!is.na(CSTRAT) & !is.na(YEAR))
+    
+    if(nrow(combined_data) > 5) {
+      p4 <- ggplot(combined_data, aes(x = CSTRAT, y = YEAR)) +
+        geom_point(alpha = 0.6) +
+        geom_smooth(method = "lm", se = TRUE, color = "red") +
+        labs(title = "Relationship Between Stratigraphic Position and Age",
+             x = "CSTRAT (cm)", y = "Age (years)") +
+        theme_minimal() +
+        scale_y_continuous(labels = scales::comma)
+      
+      # Calculate correlation
+      correlation <- cor(combined_data$CSTRAT, combined_data$YEAR, use = "complete.obs")
+      p4 <- p4 + labs(subtitle = paste("Correlation:", round(correlation, 3)))
+    }
+  }
+}
+
+# Save plots
+ggsave(paste0(p$results.figures, "fieldorder/data_completeness.svg"), p1, width = 8, height = 6)
+if(exists("p2")) ggsave(paste0(p$results.figures, "fieldorder/cstrat_distribution.svg"), p2, width = 8, height = 6)
+if(exists("p3")) ggsave(paste0(p$results.figures, "fieldorder/age_distribution.svg"), p3, width = 8, height = 6)
+if(exists("p4")) ggsave(paste0(p$results.figures, "fieldorder/cstrat_vs_year.svg"), p4, width = 8, height = 6)
+
+# Display plots
+print(p1)
+if(exists("p2")) print(p2)
+if(exists("p3")) print(p3)
+if(exists("p4")) print(p4)
 ```
