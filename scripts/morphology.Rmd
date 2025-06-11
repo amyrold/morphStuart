@@ -309,27 +309,75 @@ ggsave(paste0(p$results.figures.morphology, "differences_by_variable_type.svg"),
 # Read age data (assuming it's already loaded as 'age')
 age <- read.csv(paste0(p$data.raw, "PitLMorph_fieldorder.csv"))
 
-# Convert L..SPEC to match bin formatting
+# Convert L..SPEC to match LSPEC formatting, handling decimal suffixes
 age_formatted <- age %>%
-  # Convert L..SPEC to character and format as bin
   mutate(
-    # Handle the column name with dots - use backticks or rename
     L_SPEC_clean = `L..SPEC`,
-    # Create bin column matching the morph data format: "L" + 4-digit zero-padded number
-    LSPEC = paste0("L", str_pad(as.character(L_SPEC_clean), 4, pad = "0")),
+    # Extract base number (before any decimal) for standardized LSPEC
+    LSPEC_base_number = str_extract(as.character(L_SPEC_clean), "^\\d+"),
+    LSPEC = paste0("L", str_pad(LSPEC_base_number, 4, pad = "0")),
     # Convert relevant columns to numeric for analysis
     CSTRAT = as.numeric(CSTRAT),
     ISTRAT = as.numeric(ISTRAT), 
     YEAR = as.numeric(YEAR),
     INT = as.numeric(INT)
   ) %>%
-  # Select only the columns we need for merging
-  select(LSPEC, CSTRAT, ISTRAT, YEAR, INT) %>%
-  # Remove any rows where bin couldn't be created (NA values in L..SPEC)
+  # Keep original L_SPEC for validation, then select needed columns
+  select(L_SPEC_original = L_SPEC_clean, LSPEC, CSTRAT, ISTRAT, YEAR, INT) %>%
+  # Remove any rows where LSPEC couldn't be created
   filter(!is.na(LSPEC), LSPEC != "LNA")
 
-# Check the formatting
-head(age_formatted)
+# VALIDATION: Check that decimal suffix duplicates have identical key column values
+duplicate_validation <- age_formatted %>%
+  group_by(LSPEC) %>%
+  filter(n() > 1) %>%
+  summarise(
+    n_records = n(),
+    original_specs = paste(L_SPEC_original, collapse = ", "),
+    unique_CSTRAT = n_distinct(CSTRAT, na.rm = TRUE),
+    unique_ISTRAT = n_distinct(ISTRAT, na.rm = TRUE),
+    unique_YEAR = n_distinct(YEAR, na.rm = TRUE),
+    unique_INT = n_distinct(INT, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Check if any duplicates have different values in key columns
+problematic_duplicates <- duplicate_validation %>%
+  filter(unique_CSTRAT > 1 | unique_ISTRAT > 1 | unique_YEAR > 1 | unique_INT > 1)
+
+if(nrow(problematic_duplicates) > 0) {
+  cat("⚠️ WARNING: Found", nrow(problematic_duplicates), "LSPECs with different values in key columns:\n")
+  print(problematic_duplicates)
+  cat("Manual review required for these specimens.\n")
+} else {
+  cat("✅ Validation passed: All duplicate LSPECs have identical values for key columns\n")
+  if(nrow(duplicate_validation) > 0) {
+    cat("   Found", nrow(duplicate_validation), "sets of duplicates with identical values\n")
+    cat("   Example duplicates:", head(duplicate_validation$original_specs, 3), "\n")
+  }
+}
+
+# Remove problematic LSPECs, then deduplicate the clean ones
+problematic_lspecs <- problematic_duplicates$LSPEC
+
+age_formatted_filtered <- age_formatted %>%
+  filter(!LSPEC %in% problematic_lspecs)
+
+# Remove duplicates (keep first occurrence since values are identical)
+age_formatted_clean <- age_formatted_filtered %>%
+  select(-L_SPEC_original) %>%
+  distinct(LSPEC, .keep_all = TRUE)
+
+# Report on cleaning
+cat("Age data cleaning summary:\n")
+cat("  Original records:", nrow(age_formatted), "\n")
+cat("  Problematic LSPECs removed:", length(problematic_lspecs), "LSPECs,", 
+    nrow(age_formatted) - nrow(age_formatted_filtered), "records\n")
+cat("  After deduplication:", nrow(age_formatted_clean), "\n")
+cat("  Total records removed:", nrow(age_formatted) - nrow(age_formatted_clean), "\n")
+
+# Use the cleaned data
+age_formatted <- age_formatted_clean
 
 
 ```
@@ -419,11 +467,11 @@ merge_report <- list(
 )
 
 # Save the merge report
-saveRDS(merge_report, file = paste0(p$processed, "/age_merge_report.rds"))
+saveRDS(merge_report, file = paste0(p$data.processed, "age_merge_report.rds"))
 
 cat("\nMerge completed successfully!")
-cat("\nMerged dataset saved to:", paste0(p$data.intermediate, "/morph_with_age.csv"))
-cat("\nMerge report saved to:", paste0(p$processed, "/age_merge_report.rds"))
+cat("\nMerged dataset saved to:", paste0(p$data.intermediate, "morph_with_age.csv"))
+cat("\nMerge report saved to:", paste0(p$processed, "age_merge_report.rds"))
 ```
 
 ## Visualization of Age Data Coverage

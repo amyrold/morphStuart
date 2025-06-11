@@ -762,6 +762,125 @@ validate_paleo_data <- function(original_paleo, rioja_data, processing_steps) {
   return(validation_results)
 }
 
+#' Create Morphotype Matrix Using Split-Process-Combine Approach (Streamlined)
+#'
+#' @param merged_counts Output from merge_microscopy_counts()
+#' @param metadata_with_ages Output from integrate_age_data()
+#' @return List with stickleback, killifish, and combined results
+create_morphotype_matrix_split <- function(merged_counts, metadata_with_ages) {
+  
+  # Aggregate and add metadata
+  data <- merged_counts %>%
+    group_by(Sample_ID, Microfossil_Type, Morphotype) %>%
+    summarise(Count = sum(Count), .groups = "drop") %>%
+    filter(!is.na(Morphotype), Morphotype != "") %>%
+    left_join(metadata_with_ages$data, by = "Sample_ID") %>%
+    mutate(morphotype_label = paste(Microfossil_Type, Morphotype, sep = "_"))
+  
+  # Process each group
+  stickleback <- process_group(data %>% filter(sample_type == "Stickleback"), 
+                               row_id = "LSPEC", include_age = TRUE)
+  killifish <- process_group(data %>% filter(sample_type == "Killifish"), 
+                             row_id = "V_number", include_age = FALSE)
+  
+  # Combined summary - using base R instead of purrr
+  all_morphotypes <- union(colnames(stickleback$counts), colnames(killifish$counts))
+  
+  # Calculate totals using sapply instead of map_dbl
+  stickleback_totals <- sapply(all_morphotypes, function(x) {
+    if(x %in% colnames(stickleback$counts)) sum(stickleback$counts[, x]) else 0
+  })
+  
+  killifish_totals <- sapply(all_morphotypes, function(x) {
+    if(x %in% colnames(killifish$counts)) sum(killifish$counts[, x]) else 0
+  })
+  
+  stickleback_samples <- sapply(all_morphotypes, function(x) {
+    if(x %in% colnames(stickleback$counts)) sum(stickleback$counts[, x] > 0) else 0
+  })
+  
+  killifish_samples <- sapply(all_morphotypes, function(x) {
+    if(x %in% colnames(killifish$counts)) sum(killifish$counts[, x] > 0) else 0
+  })
+  
+  morphotype_summary <- data.frame(
+    Morphotype = all_morphotypes,
+    Stickleback_Total = stickleback_totals,
+    Killifish_Total = killifish_totals,
+    Stickleback_Samples = stickleback_samples,
+    Killifish_Samples = killifish_samples,
+    stringsAsFactors = FALSE
+  ) %>%
+    mutate(
+      Total = Stickleback_Total + Killifish_Total,
+      Microfossil_Type = ifelse(grepl("^Diatom", Morphotype), "Diatom", "Phytolith")
+    ) %>%
+    arrange(desc(Total))
+  
+  return(list(
+    stickleback = stickleback,
+    killifish = killifish,
+    morphotype_summary = morphotype_summary
+  ))
+}
+
+#' Process Individual Sample Group (Streamlined)
+#'
+#' @param data Filtered data for one sample type
+#' @param row_id Column to use as row identifier 
+#' @param include_age Whether to include age/depth data
+process_group <- function(data, row_id, include_age) {
+  
+  # Create matrix
+  wide_data <- data %>%
+    select(all_of(row_id), Sample_ID, V_number, sample_type, 
+           if(include_age) c("CSTRAT", "YEAR") else character(), 
+           morphotype_label, Count) %>%
+    pivot_wider(names_from = morphotype_label, values_from = Count, values_fill = 0)
+  
+  if(!include_age) wide_data <- wide_data %>% mutate(CSTRAT = NA_real_, YEAR = NA_real_)
+  
+  # Split into counts and samples
+  count_cols <- str_subset(colnames(wide_data), "^(Diatom|Phytolith)_")
+  counts <- wide_data %>% select(all_of(count_cols)) %>% as.data.frame()
+  samples <- wide_data %>% select(-all_of(count_cols))
+  
+  rownames(counts) <- samples[[row_id]]
+  
+  return(list(counts = counts, samples = samples))
+}
+
+#' Export Results (Streamlined)
+#'
+#' @param results Output from create_morphotype_matrix_split()
+#' @param prefix Filename prefix
+#' @param dir Output directory
+export_morphotype_results <- function(results, prefix = "morphotype", dir = ".") {
+  
+  if(!dir.exists(dir)) dir.create(dir, recursive = TRUE)
+  
+  # Export matrices with metadata
+  export_matrix <- function(matrix_data, suffix, row_col) {
+    filename <- file.path(dir, paste0(prefix, "_", suffix, ".csv"))
+    
+    matrix_data$counts %>%
+      rownames_to_column(row_col) %>%
+      left_join(matrix_data$samples, by = setNames(row_col, names(matrix_data$samples)[1])) %>%
+      write_csv(filename)
+    
+    return(filename)
+  }
+  
+  files <- list(
+    stickleback = export_matrix(results$stickleback, "stickleback", "LSPEC"),
+    killifish = export_matrix(results$killifish, "killifish", "V_number"),
+    summary = write_csv(results$morphotype_summary, 
+                        file.path(dir, paste0(prefix, "_summary.csv")))
+  )
+  
+  return(files)
+}
+
 #' Export Paleo Results for Analysis and Review
 #'
 #' Creates standardized export files for paleo-ecological analysis matching

@@ -26,6 +26,8 @@ source(paste0(p$src, "paleoeco_cleaning.R"))
 # Read paleo-ecological data
 paleo <- read.csv(paste0(p$data.raw, "060625_paleoeco_seriesL.csv"))
 
+#out <- lapply(paleo[c("Morphotype", "Genus_Type", "Species")], function(x) sort(unique(x[!is.na(x) & x != ""])))
+
 # ADD LOGGING:
 processing_log <- log_step(
   processing_log, 
@@ -77,6 +79,20 @@ merged_diatom_counts <- merge_microscopy_counts(paleo, microfossil_type = "Diato
 
 # Option 3: Process only phytoliths (example)
 merged_phytolith_counts <- merge_microscopy_counts(paleo, microfossil_type = "Phytolith")
+
+source(paste0(p$src, "paleoeco_cleaning.R"))
+# Process both groups
+results <- create_morphotype_matrix_split(merged_all_counts, paleo_with_ages)
+
+# Export clean files  
+files <- export_morphotype_results(results, "paleo_morphotypes", p$data.intermediate)
+
+# Access matrices
+stickleback_matrix <- results$stickleback$counts  # rownames = LSPEC
+killifish_matrix <- results$killifish$counts      # rownames = V_number
+summary_stats <- results$morphotype_summary       # combined analysis
+
+# This gives you both diatom and phytolith morphotypes in one analysis-ready matrix!
 
 # For this example, let's continue with diatoms to match the original workflow
 # ADD LOGGING:
@@ -139,7 +155,7 @@ taxa_for_review <- data.frame(
   mutate(rank = row_number())
 
 write.csv(taxa_for_review, 
-          file = paste0(p$data.flagged, "/diatom_taxa_for_review.csv"),
+          file = paste0(p$data.flagged, "diatom_taxa_for_review.csv"),
           row.names = FALSE)
 ```
 
