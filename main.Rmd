@@ -1,0 +1,278 @@
+---
+title: "analysis"
+author: "Aaron Myrold"
+date: "`r Sys.Date()`"
+output: html_document
+---
+#==============================================================================#
+# SETUP
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r source}
+# Source project setup and run config
+source("src/project_setup.R")
+setup_project('config.yaml')
+
+```
+#==============================================================================#
+# MERGE AGE ESTIMATES
+## Merge with Morphological Data
+```{r Merge Age Data}
+# Merge age data with the processed morphological data
+# Assuming you have your merged_non_overlap data from the previous processing
+age_formatted <- read.csv(paste0(p$data.intermediate, "clean_fieldorder.csv"))
+
+# Read the merged morphological data if not already in memory
+if (!exists("merged_non_overlap")) {
+  merged_non_overlap <- read.csv(paste0(p$data.intermediate, "merged_non_overlap.csv"))
+}
+
+# Perform the merge
+morph_with_age <- merged_non_overlap %>%
+  left_join(age_formatted, by = "LSPEC")
+
+# ADD LOGGING:
+processing_log <- log_step(
+  processing_log,
+  step_name = "Age Data Merging",
+  input_data = merged_non_overlap,
+  output_data = morph_with_age,
+  notes = paste("Merged age data for", sum(!is.na(morph_with_age$CSTRAT)), "specimens")
+)
+
+# EXPORT COMPREHENSIVE PROCESSING LOG:
+log_files <- export_log(processing_log, output_dir = p$docs.logs)
+
+
+# Check merge results
+merge_summary <- morph_with_age %>%
+  summarise(
+    total_specimens = n(),
+    specimens_with_age_data = sum(!is.na(CSTRAT)),
+    specimens_with_istrat = sum(!is.na(ISTRAT)),
+    specimens_with_year = sum(!is.na(YEAR)),
+    specimens_with_int = sum(!is.na(INT)),
+    percent_with_age_data = round(100 * sum(!is.na(CSTRAT)) / n(), 1)
+  )
+
+print("Merge Summary:")
+print(merge_summary)
+
+# Check which LSPECs from morphological data don't have age matches
+missing_age_LSPEC <- morph_with_age %>%
+  filter(is.na(CSTRAT)) %>%
+  select(LSPEC) %>%
+  distinct() %>%
+  pull(LSPEC)
+
+if(length(missing_age_LSPEC) > 0) {
+  cat("\nLSPECs in morphological data without age matches:\n")
+  print(missing_age_LSPEC)
+}
+
+# Check which LSPECs from age data don't have morphological matches
+available_age_LSPECs <- unique(age_formatted$LSPEC)
+used_age_LSPECs <- unique(morph_with_age$LSPEC[!is.na(morph_with_age$CSTRAT)])
+unused_age_LSPECs <- setdiff(available_age_LSPECs, used_age_LSPECs)
+
+if(length(unused_age_LSPECs) > 0) {
+  cat("\nLSPECs in age data without morphological matches:\n")
+  print(head(unused_age_LSPECs, 20))  # Show first 20
+  if(length(unused_age_LSPECs) > 20) {
+    cat("... and", length(unused_age_LSPECs) - 20, "more\n")
+  }
+}
+```
+
+## Save Merged Dataset
+```{r Save Merged Data}
+# Write the merged dataset
+write.csv(morph_with_age, 
+          file = paste0(p$data.intermediate, "morph_with_age.csv"),
+          row.names = FALSE)
+
+# Create a summary report of the merge
+merge_report <- list(
+  merge_summary = merge_summary,
+  missing_age_LSPECs = missing_age_LSPEC,
+  unused_age_LSPECs = unused_age_LSPECs,
+  total_age_records = nrow(age_formatted),
+  total_morph_records = nrow(merged_non_overlap),
+  final_merged_records = nrow(morph_with_age)
+)
+
+# Save the merge report
+saveRDS(merge_report, file = paste0(p$data.processed, "age_merge_report.rds"))
+
+cat("\nMerge completed successfully!")
+cat("\nMerged dataset saved to:", paste0(p$data.intermediate, "morph_with_age.csv"))
+cat("\nMerge report saved to:", paste0(p$processed, "age_merge_report.rds"))
+```
+
+## Visualization of Age Data Coverage
+```{r Age Data Visualization}
+# Create visualizations to understand the age data coverage
+
+# 1. Distribution of specimens across stratigraphic levels
+if(sum(!is.na(morph_with_age$CSTRAT)) > 0) {
+  
+  p1 <- ggplot(morph_with_age %>% filter(!is.na(CSTRAT)), 
+               aes(x = CSTRAT)) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+    labs(title = "Distribution of Specimens by Stratigraphic Level (CSTRAT)",
+         x = "Stratigraphic Level (cm)",
+         y = "Number of Specimens") +
+    theme_minimal()
+  
+  print(p1)
+  ggsave(paste0(p$results.figures.morphology, "specimens_by_strat_level.svg"), p1, width = 8, height = 6)
+  
+  # 2. Age distribution
+  p2 <- ggplot(morph_with_age %>% filter(!is.na(YEAR)), 
+               aes(x = YEAR)) +
+    geom_histogram(bins = 30, fill = "lightgreen", color = "black") +
+    labs(title = "Distribution of Specimens by Age (YEAR)",
+         x = "Age (years)",
+         y = "Number of Specimens") +
+    theme_minimal() +
+    scale_x_continuous(labels = scales::comma)
+  
+  print(p2)
+  ggsave(paste0(p$results.figures.morphology, "specimens_by_age.svg"), p2, width = 8, height = 6)
+
+  
+  # 3. Relationship between CSTRAT and ISTRAT
+  if(sum(!is.na(morph_with_age$ISTRAT)) > 0) {
+    p3 <- ggplot(morph_with_age %>% filter(!is.na(CSTRAT) & !is.na(ISTRAT)), 
+                 aes(x = CSTRAT, y = ISTRAT)) +
+      geom_point(alpha = 0.6) +
+      geom_smooth(method = "lm", se = TRUE, color = "red") +
+      labs(title = "Relationship between CSTRAT and ISTRAT",
+           x = "CSTRAT (cm)",
+           y = "ISTRAT (cm)") +
+      theme_minimal()
+    
+    print(p3)
+    ggsave(paste0(p$results.figures.morphology, "cstrat_vs_istrat.svg"), p3, width = 8, height = 6)
+  }
+}
+```
+
+## Trait Evolution Over Time
+```{r Trait Evolution Visualization}
+# Get the continuous variables for trait evolution analysis
+var_map <- variable_mapping()
+continuous_vars <- var_map$continuous
+
+# Prepare data for trait evolution analysis
+trait_evolution_data <- morph_with_age %>%
+  # Only include specimens with age data
+  filter(!is.na(YEAR) & !is.na(CSTRAT)) %>%
+  # Convert to long format for easier plotting
+  pivot_longer(
+    cols = all_of(continuous_vars),
+    names_to = "trait",
+    values_to = "value"
+  ) %>%
+  # Remove rows with missing trait values
+  filter(!is.na(value)) %>%
+  # Calculate sample sizes per trait for reference
+  group_by(trait) %>%
+  mutate(
+    n_specimens = n(),
+    trait_label = paste0(trait, " (n=", n_specimens, ")")
+  ) %>%
+  ungroup()
+
+# Basic age distribution of specimens with trait data
+p_age_dist <- ggplot(morph_with_age %>% filter(!is.na(YEAR)), 
+                     aes(x = YEAR)) +
+  geom_histogram(bins = 30, fill = "lightblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Specimens with Age Data",
+       x = "Age (years)",
+       y = "Number of Specimens") +
+  theme_minimal() +
+  scale_x_continuous(labels = scales::comma)
+
+print(p_age_dist)
+
+# Multi-panel trait evolution over time (using YEAR)
+if(nrow(trait_evolution_data) > 0) {
+  
+  p_traits_time <- ggplot(trait_evolution_data, aes(x = YEAR, y = value)) +
+    geom_point(alpha = 0.4, size = 0.8) +
+    geom_smooth(method = "loess", se = TRUE, color = "red", size = 0.8) +
+    facet_wrap(~ trait_label, scales = "free_y", ncol = 3) +
+    labs(title = "Morphological Trait Evolution Over Time",
+         x = "Age (years)",
+         y = "Trait Value") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text = element_text(size = 10)
+    ) +
+    scale_x_continuous(labels = scales::comma)
+  
+  print(p_traits_time)
+  
+  # Alternative view: traits over stratigraphic position (CSTRAT)
+  p_traits_strat <- ggplot(trait_evolution_data, aes(x = CSTRAT, y = value)) +
+    geom_point(alpha = 0.4, size = 0.8) +
+    geom_smooth(method = "loess", se = TRUE, color = "blue", size = 0.8) +
+    facet_wrap(~ trait_label, scales = "free_y", ncol = 3) +
+    labs(title = "Morphological Traits Over Stratigraphic Position",
+         x = "Stratigraphic Level (CSTRAT, cm)",
+         y = "Trait Value") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text = element_text(size = 10)
+    )
+  
+  print(p_traits_strat)
+  
+  # Focus on body size (SL) evolution if available
+  sl_data <- trait_evolution_data %>% filter(trait == "SL")
+  
+  if(nrow(sl_data) > 10) {  # Only if we have reasonable sample size
+    p_sl_evolution <- ggplot(sl_data, aes(x = YEAR, y = value)) +
+      geom_point(alpha = 0.6, size = 1.2, color = "darkblue") +
+      geom_smooth(method = "loess", se = TRUE, color = "red", fill = "pink") +
+      labs(title = "Body Size (Standard Length) Evolution Over Time",
+           x = "Age (years)",
+           y = "Standard Length (SL)",
+           caption = paste("n =", nrow(sl_data), "specimens")) +
+      theme_minimal() +
+      scale_x_continuous(labels = scales::comma)
+    
+    print(p_sl_evolution)
+  }
+  
+  # Summary statistics for trait trends
+  trait_trends <- trait_evolution_data %>%
+    group_by(trait) %>%
+    summarise(
+      n_specimens = n(),
+      age_range_years = max(YEAR) - min(YEAR),
+      correlation_with_age = cor(YEAR, value, use = "complete.obs"),
+      mean_value = mean(value),
+      sd_value = sd(value),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(abs(correlation_with_age)))
+  
+  cat("\nTrait correlations with age (strongest correlations first):\n")
+  print(trait_trends)
+  
+} else {
+  cat("No trait evolution data available - check if specimens have both age and trait measurements.\n")
+}
+
+ggsave(paste0(p$results.figures.morphology, "age_distribution.svg"), p_age_dist, width = 8, height = 6)
+ggsave(paste0(p$results.figures.morphology, "traits_over_time.svg"), p_traits_time, width = 12, height = 8)
+ggsave(paste0(p$results.figures.morphology, "traits_over_strat.svg"), p_traits_strat, width = 12, height = 8)
+if(exists("p_sl_evolution")) ggsave(paste0(p$results.figures.morphology, "body_size_evolution.svg"), p_sl_evolution, width = 8, height = 6)
+```
+#==============================================================================#
