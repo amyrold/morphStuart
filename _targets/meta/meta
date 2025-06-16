@@ -1,0 +1,38 @@
+name|type|data|command|depend|seed|path|time|size|bytes|format|repository|iteration|parent|children|seconds|warnings|error
+print_paleo_summary|function|634e80b5c1e4288e
+create_rioja_matrix|function|05bfb97166a4d7ae
+print_step_summary|function|82cc1a113300de39
+aggregate_values|function|d8f3a335eee8e8da
+variable_mapping|function|b86fce7484e94187
+process_group|function|62f81e679f33f004
+export_morphotype_results|function|2ed749a37c9715da
+extract_paleo_metadata|function|221447f45395e27b
+calculate_diversity_metrics|function|b50e760ed372c50c
+export_paleo_results|function|7601712413f03660
+validate_paleo_data|function|0e3f490016e3a19a
+export_review_list|function|64109984214dcf4e
+export_for_jacopo|function|a52861f61df69375
+flag_missing_scales|function|3aba2d7b0dc99bca
+integrate_age_data|function|c10047c5cb214aa0
+handle_special_cases|function|4d10cb0d18525c91
+merge_microscopy_counts|function|3d3eebc90e28a53f
+extract_fish_ids|function|38947648dd231089
+merge_non_overlap|function|f78808c670a03bd4
+identify_overlaps|function|7c5bc5fea7dfb81f
+create_review_list|function|e9d86e0ef322ec02
+create_morphotype_matrix_split|function|f3a6d6884ba121e5
+morph_cleaning|function|6ce661e6a00c01d8
+morph|stem|bd093a61c1c70f90|10321c1146fa5932|2c530c1562a7fbd1|-982438572|data/raw/020625_PitLMorph.csv|t20241.7661837291s|s441427b|441427|file|local|vector|||2.849|package ‘rioja’ was built under R version 4.3.3|
+paleo|stem|960315f5ee58d2b7|4e7cd21dbf997b5d|2c530c1562a7fbd1|-17593753|data/raw/060625_paleoeco_seriesL.csv|t20245.6184510562s|s2157481b|2157481|file|local|vector|||0.001||
+order|stem|7b52b723d71258a9|c687ed91dcdf2a90|2c530c1562a7fbd1|1388908496|data/raw/PitLMorph_fieldorder.csv|t20241.6830544269s|s295256b|295256|file|local|vector|||0||
+morph_raw|stem|9f54c88966ae48ee|c230ca977436ddfb|7c9862d325f16e09|1870690869||t20252.7738301321s|s147022b|147022|rds|local|vector|||0.014||
+paleo_raw|stem|fbe74e859e2f5764|25cf449a4f0d56c2|eb2446972ea351bd|-1145096899||t20252.7738309783s|s89368b|89368|rds|local|vector|||0.03||
+order_raw|stem|d888c519089fc9a8|2a46ac15890e8a76|d8277d0b542936cf|897368170||t20252.773831357s|s85219b|85219|rds|local|vector|||0.007||
+morph_with_ids|stem|a3d628877305df7e|19c6c6c96f77aed8|3db4aaecbf56df89|-2111850078||t20252.7738318618s|s163857b|163857|rds|local|vector|||0.02||
+paleo_merged_counts|stem|51c3420031075b47|3ee66e5f798503ca|fe5ad061be3227cc|520473674||t20252.7738332735s|s8267b|8267|rds|local|vector|||0.091||
+paleo_metadata|stem|346e680844d418c0|d0ae544113c50096|662df4c26f0a3d22|1962824547||t20252.7738346768s|s849b|849|rds|local|vector|||0.011||
+morph_scaled|stem|efee9430e03474f5|5d0d743559432abb|6463f15351767eb6|721541106||t20252.7738354951s|s163387b|163387|rds|local|vector|||0.046||
+morph_corrected|stem|65d64c137b45c39f|46bc71f34a171ccb|ab2399ba1eea9d5e|-399856020||t20252.7738358939s|s165043b|165043|rds|local|vector|||0.009||
+overlap_metrics|stem|8a806870f1d6ddf7|87c7448e21fda23c|55fc07ef1c84094f|-208606303||t20252.7738475672s|s211054b|211054|rds|local|vector|||0.978||
+overlap_review|stem|06f5030115832d03|74d3952accdad697|0433a9ae60fce41a|1084543965||t20252.7738489696s|s49185b|49185|rds|local|vector|||0.101|There were 42 warnings in `summarize()`. The first warning was: ℹ In argument: `max_relative_diff = max(max_relative_diff, na.rm = TRUE)`. ℹ In group 6: `fish_id = 'V330397'`. Caused by warning in `max()`: ! no non-missing arguments to max; returning -Inf ℹ Run `dplyr::last_dplyr_warnings()` to see the 41 remaining warnings.|
+overlap_fish|stem||e64017579aac6533|277566b4d80682fe|-435671704||t20252.7738491418s||0|rds|local|vector|||0.003||could not find function 'extract_overlap_fish'

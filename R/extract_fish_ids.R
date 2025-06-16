@@ -1,9 +1,9 @@
-#'
+#' Extract V #'s and LSPEC #'s
 #'
 #'
 #'
 
-format_sampleIDs <- function(morph){
+extract_fish_ids <- function(morph){
   # Extract fish ID and part type
   # ID format: VXXXXXX_LXXXX(A)_1_P/C.jpg or VXXXXXX_LXXXX(A)_1_P2.jpg
   # where VXXXXXX is the specimen ID, LXXXX(A) is the LSPEC/locality, and P/C indicates part/counterpart

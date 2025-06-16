@@ -14,7 +14,7 @@
 #' @examples
 #' results <- identify_overlaps(morph_data, threshold = 0.05)
 #' flagged_fish <- results$overlap_fish
-identify_overlaps <- function(data, threshold = 0.05) {
+flag_counterpart_conflicts <- function(data, threshold = 0.05) {
   # Validate inputs
   if (!is.data.frame(data)) {
     stop("Input must be a data frame")

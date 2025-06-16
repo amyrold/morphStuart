@@ -9,7 +9,7 @@
 #'
 #' @examples
 #' merged_data <- merge_non_overlap(non_overlap_fish)
-merge_non_overlap <- function(data) {
+merge_counter_parts <- function(data) {
   # Validate input
   if (!is.data.frame(data)) {
     stop("Input must be a data frame")

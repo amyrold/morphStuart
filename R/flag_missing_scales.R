@@ -4,7 +4,7 @@
 #'
 
 
-missing_scales <- function(morph){
+flag_missing_scales <- function(morph){
   # Check for missing scale information
   scale_summary <- morph %>%
     group_by(fish_id) %>%
@@ -28,7 +28,7 @@ missing_scales <- function(morph){
   
   # Write the detailed report
   write.csv(missing_scales_detail, 
-            file = paste0(p$data.flagged, "fish_missing_scales_detailed.csv"), 
+            file = "data/flagged/fish_missing_scales_detailed.csv", 
             row.names = FALSE)
   
   # Split the dataset
@@ -40,11 +40,11 @@ missing_scales <- function(morph){
   
   # Write the datasets to separate files for reference
   write.csv(morph_with_scales, 
-            file = paste0(p$data.raw, "fish_with_scales.csv"), 
+            file = "data/raw/fish_with_scales.csv", 
             row.names = FALSE)
   
   write.csv(morph_without_scales, 
-            file = paste0(p$data.flagged, "fish_without_scales.csv"), 
+            file = "data/flagged/fish_without_scales.csv", 
             row.names = FALSE)
   return(morph_with_scales)
 }
