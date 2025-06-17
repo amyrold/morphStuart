@@ -4,7 +4,7 @@ Some data cleaning and analysis
 
 # Table of Functions
 ## Morph
-- *ToDo* Extract Fish IDs
+- extract_fish_ids
 - *ToDo* Basic quality checks
 - *ToDo* Flag fish without scales
 - morph_corrected <- handle_special_cases(morph)

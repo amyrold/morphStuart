@@ -1,4 +1,4 @@
-#' Handle Special NA Cases in Dorsal Spine and Pelvic Girdle Data
+#' Handle Special Cases in Dorsal Spine and Pelvic Girdle Data
 #'
 #' Applies biological logic to distinguish between true zeros (evolutionary loss)
 #' and missing data due to poor preservation. This is critical for accurate
@@ -16,7 +16,7 @@
 #'
 #' @examples
 #' cleaned_data <- handle_special_cases(raw_morph_data)
-handle_special_NAs <- function(data) {
+handle_special_cases <- function(data) {
   # Validate input
   if (!is.data.frame(data)) {
     stop("Input must be a data frame")

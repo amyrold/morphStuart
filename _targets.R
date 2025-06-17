@@ -1,63 +1,152 @@
-#_targets.R
+# _targets.R
+# ========================================================================= #
+# STICKLEBACK MORPHOLOGY & PALEO-ECOLOGY ANALYSIS PIPELINE
+# ========================================================================= #
+# 
+# This pipeline processes stickleback morphological measurements and 
+# paleo-ecological microfossil data for evolutionary analysis.
+#
+# PIPELINE OVERVIEW:
+# 1. DATA IMPORT: Load raw morphology, paleo, and field order data
+# 2. MORPHOLOGY PROCESSING: Clean IDs, handle quality issues, merge P/CP data
+# 3. PALEO PROCESSING: Extract metadata, merge microscopy counts, integrate ages
+# 4. ANALYSIS OUTPUTS: Create rioja matrices, diversity metrics, export results
+#
+# USAGE:
+# - Run entire pipeline: tar_make()
+# - View pipeline: tar_visnetwork()
+# - Check status: tar_progress()
 library(targets)
+library(tarchetypes)
 
 tar_option_set(
   packages = c("dplyr", "tidyr", "stringr", "tibble", "purrr", "ggplot2", "scales",
-               "vegan", "rioja")
+               "vegan", "rioja"),
+  format = "rds",
+  error = "continue"
 )
 
 tar_source()
 
 list(
+  # ========================================================================= #
+  # CONFIGURATION & SETUP ----
+  # ========================================================================= #
   
-  # Data Import ----
+  # tar_target(
+  #   name = variable_mapping,
+  #   command = variable_mapping(),
+  #   description = "Define variable types (continuous, count, binary) for analysis"
+  # ),
+  
+  # ========================================================================= #
+  # DATA IMPORT ----
+  # ========================================================================= #
+  
   tar_target(
-    morph, 
-    "data/raw/020625_PitLMorph.csv",
-    format = "file"
-    ),
-  tar_target(morph_raw, read.csv(morph)),
-  tar_target(
-    paleo, 
-    "data/raw/060625_paleoeco_seriesL.csv",
-    format = "file"
+    name = morph_file,
+    command = "data/raw/020625_PitLMorph.csv",
+    format = "file",
+    description = "Raw morphological measurements CSV file"
   ),
-  tar_target(paleo_raw, read.csv(paleo)),
+  
   tar_target(
-    order, 
-    "data/raw/PitLMorph_fieldorder.csv",
-    format = "file"
+    name = morph_raw,
+    command = read.csv(morph_file),
+    description = "Raw morphological data (fish measurements, P/CP pairs)"
   ),
-  tar_target(order_raw, read.csv(order)),
   
-  # Morphology ----
-  # Basic preprocessing
-  tar_target(morph_with_ids, extract_fish_ids(morph_raw)),
-  #tar_target(morph_quality_check, basic_quality_checks(morph_with_ids)),
-  tar_target(morph_scaled, flag_missing_scales(morph_with_ids)),
+  tar_target(
+    name = paleo_file,
+    command = "data/raw/060625_paleoeco_seriesL.csv", 
+    format = "file",
+    description = "Raw paleo-ecological microfossil counts CSV file"
+  ),
   
-  # Special case handling
-  tar_target(morph_corrected, handle_special_cases(morph_scaled)),
+  tar_target(
+    name = paleo_raw,
+    command = read.csv(paleo_file),
+    description = "Raw paleo-ecological data (microscopy line counts)"
+  ),
   
-  # Overlap detection and resolution
-  tar_target(overlap_metrics, identify_overlaps(morph_corrected, threshold = 0.05)),
-  tar_target(non_overlap_fish, extract_non_overlap(overlap_metrics)),
-  tar_target(overlap_fish, extract_overlap_fish(overlap_metrics)),
-  tar_target(morph_merged, merge_non_overlap(non_overlap_fish)),
+  tar_target(
+    name = order_file,
+    command = "data/raw/PitLMorph_fieldorder.csv",
+    format = "file", 
+    description = "Field order reference data CSV file"
+  ),
   
-  # Review and flagging
-  tar_target(overlap_review, create_review_list(overlap_metrics, use_threshold = TRUE)),
-  tar_target(review_export, export_review_files(overlap_review, "data/flagged")),
+  tar_target(
+    name = order_raw,
+    command = read.csv(order_file),
+    description = "Field collection order reference data"
+  ),
   
-  # Field Order ----
+  # ========================================================================= #
+  # MORPHOLOGY PROCESSING PIPELINE ----
+  # ========================================================================= #
+  
+  tar_target(
+    name = morph_with_ids,
+    command = extract_fish_ids(morph_raw),
+    description = "Extract fish_id, LSPEC, and part_type from image filenames"
+  ),
+  
+  tar_target(
+    name = morph_with_scales, 
+    command = flag_missing_scales(morph_with_ids),
+    description = "Filter out fish specimens missing 10mm scale bars"
+  ),
+  
+  tar_target(
+    name = morph_corrected,
+    command = handle_special_NAs(morph_with_scales),
+    description = "Apply biological logic to distinguish true zeros from missing data"
+  ),
+  
+  tar_target(
+    name = morph_non_overlap,
+    command = flag_counterpart_conflicts(morph_corrected, threshold = 0.05),
+    description = "Flag and remove fish with conflicting part/counterpart measurements"
+  ),
+  
+  tar_target(
+    name = morph_final,
+    command = merge_counter_parts(morph_non_overlap),
+    description = "Merge non-conflicting part/counterpart data into single records"
+  ),
+  
+  # ========================================================================= #
+  # PALEO-ECOLOGICAL PROCESSING PIPELINE ----
+  # ========================================================================= #
+  
+  tar_target(
+    name = paleo_metadata,
+    command = extract_paleo_metadata(paleo_raw),
+    description = "Extract V-numbers, LSPEC codes, and sample type classification"
+  ),
+  
+  tar_target(
+    name = paleo_merged_counts,
+    command = merge_microscopy_counts(paleo_raw),
+    description = "Merge 4-5 microscopy line counts per geological sample"
+  )
+  
+  # tar_target( #TODO update morph_final -> paleo eco and move to analysis
+  #   name = paleo_with_ages,
+  #   command = integrate_age_data(paleo_metadata, morph_final),
+  #   description = "Link paleo samples to stratigraphic depths and ages via LSPEC"
+  # )
+  
+  #============================================================================#
+  # FIELD ORDER ----
   #tar_target(fieldorder_formatted, format_fieldorder_data(order_raw)),
   #tar_target(fieldorder_duplicates, identify_fieldorder_duplicates(fieldorder_formatted)),
   #tar_target(fieldorder_clean, create_clean_fieldorder(fieldorder_formatted, fieldorder_duplicates)),
-  #tar_target(fieldorder_flagged, create_flagged_fieldorder(fieldorder_duplicates)),
+  #tar_target(fieldorder_flagged, create_flagged_fieldorder(fieldorder_duplicates))
   
-  # Paleo Eco ----
-  tar_target(paleo_metadata, extract_paleo_metadata(paleo_raw)),
-  tar_target(paleo_merged_counts, merge_microscopy_counts(paleo_raw))
+  #============================================================================#
+  
   
 )
 

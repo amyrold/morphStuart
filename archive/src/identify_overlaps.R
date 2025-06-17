@@ -14,7 +14,7 @@
 #' @examples
 #' results <- identify_overlaps(morph_data, threshold = 0.05)
 #' flagged_fish <- results$overlap_fish
-flag_counterpart_conflicts <- function(data, threshold = 0.05) {
+identify_overlaps <- function(data, threshold = 0.05) {
   # Validate inputs
   if (!is.data.frame(data)) {
     stop("Input must be a data frame")
@@ -49,7 +49,6 @@ flag_counterpart_conflicts <- function(data, threshold = 0.05) {
     group_by(fish_id, measure) %>%
     summarize(
       # Use max for binary variables, mean for others
-      # TODO confirm this logic does not introduce errors (i.e. taking mean of continuous between real value and a 0)
       part_value = if(first(measure) %in% var_map$binary) max(value) else mean(value),
       part_scale = mean(Scale_10mm, na.rm = TRUE),
       has_multiple_values = n() > 1,
@@ -124,8 +123,10 @@ flag_counterpart_conflicts <- function(data, threshold = 0.05) {
   non_overlap_fish <- data %>%
     filter(!fish_id %in% fish_to_flag)
   
-  write.csv(overlap_fish, file = "data/flagged/counterpart_conflicts.csv")
-  
   # Return results maintaining original data structure
-  return(as.data.frame(non_overlap_fish))
+  return(list(
+    overlap_fish = as.data.frame(overlap_fish),
+    non_overlap_fish = as.data.frame(non_overlap_fish), 
+    overlap_metrics = as.data.frame(overlaps)
+  ))
 }

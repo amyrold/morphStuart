@@ -1,0 +1,56 @@
+FISH MORPHOLOGY DATA PROCESSING LOG
+===================================
+
+Project: Fish Paleobiology Analysis v 2.1 - Configuration-driven setup 
+Start time: 2025-06-10 17:10:16 
+R version: R version 4.3.2 (2023-10-31) 
+
+
+ STEP 1 : Paleo Data Import 
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Timestamp: 2025-06-10 17:10:16 
+Input:  24540 rows
+Notes: Initial import of paleo-ecological microfossil data 
+
+ STEP 2 : Paleo Metadata Extraction 
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Timestamp: 2025-06-10 17:10:16 
+Input:  24540 rows
+Output: 59 rows
+Notes: Extracted V-numbers, LSPEC, and sample types for data linking 
+
+ STEP 3 : Microscopy Count Merging 
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Timestamp: 2025-06-10 17:10:16 
+Input:  24540 rows
+Output: 922 rows
+Notes: Merged multiple microscopy line counts per geological sample for diatoms 
+
+ STEP 4 : Age Data Integration 
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Timestamp: 2025-06-10 17:10:17 
+Input:  59 rows
+Output: 59 rows
+Notes: Integrated age data for  out of 59 samples 
+
+ STEP 5 : Rioja Matrix Creation 
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Timestamp: 2025-06-10 17:10:17 
+Input:  922 rows
+Output: 40 rows
+Notes: Created 40 × 11 matrix for stratigraphic analysis 
+
+ STEP 6 : Paleo Results Export 
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Timestamp: 2025-06-10 17:10:17 
+Input:  40 rows
+Files created: /Users/blue/GitHub/morphStuart/data/intermediate//diatom_analysis_summary_table.csv, /Users/blue/GitHub/morphStuart/data/intermediate//diatom_analysis_taxa_for_grouping.csv, /Users/blue/GitHub/morphStuart/data/intermediate//diatom_analysis_sample_info.csv, /Users/blue/GitHub/morphStuart/data/intermediate//diatom_analysis_processing_metadata.txt 
+Notes: Exported summary tables and taxa lists for analysis 
+
+ STEP 7 : Age Data Merging 
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Timestamp: 2025-06-10 18:39:13 
+Input:  2358 rows, 2358 unique fish
+Output: 2358 rows, 2358 unique fish
+Change: +0 rows, +0 fish
+Notes: Merged age data for 2269 specimens 
