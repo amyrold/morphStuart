@@ -130,7 +130,7 @@ list(
     name = paleo_merged_counts,
     command = merge_microscopy_counts(paleo_raw),
     description = "Merge 4-5 microscopy line counts per geological sample"
-  )
+  ),
   
   # tar_target( #TODO update morph_final -> paleo eco and move to analysis
   #   name = paleo_with_ages,
@@ -147,7 +147,14 @@ list(
   
   #============================================================================#
   
+  #TODO build extract_lspec() & extract_vscore() -> utils
   
+  
+  #TODO build format_fieldorder()
+  #TODO build identify_fieldorder_duplicates()
+  #TODO build clean_fieldorder()
+  # TODO build flag_fieldorder()
+  tar_render(report, "report.Rmd")
 )
 
 
