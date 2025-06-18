@@ -83,14 +83,16 @@ list(
   ),
   
   # ========================================================================= #
-  # MORPHOLOGY PROCESSING PIPELINE ----
+  # EXTRACT STANDARDIZED IDs ----
   # ========================================================================= #
   
-  tar_target(
-    name = morph_with_ids,
-    command = extract_fish_ids(morph_raw),
-    description = "Extract fish_id, LSPEC, and part_type from image filenames"
-  ),
+  tar_target(morph_with_ids, extract_ids(morph_raw)),
+  tar_target(paleo_with_ids, extract_ids(paleo_raw)),  
+  tar_target(order_with_ids, extract_ids(order_raw)),  
+  
+  # ========================================================================= #
+  # MORPHOLOGY PROCESSING PIPELINE ----
+  # ========================================================================= #
   
   tar_target(
     name = morph_with_scales, 
@@ -120,11 +122,11 @@ list(
   # PALEO-ECOLOGICAL PROCESSING PIPELINE ----
   # ========================================================================= #
   
-  tar_target(
-    name = paleo_metadata,
-    command = extract_paleo_metadata(paleo_raw),
-    description = "Extract V-numbers, LSPEC codes, and sample type classification"
-  ),
+  # tar_target(
+  #   name = paleo_metadata,
+  #   command = extract_paleo_metadata(paleo_raw),
+  #   description = "Extract V-numbers, LSPEC codes, and sample type classification"
+  # ),
   
   tar_target(
     name = paleo_merged_counts,
