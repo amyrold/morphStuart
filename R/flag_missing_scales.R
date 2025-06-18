@@ -1,9 +1,23 @@
+#' Filter Fish Specimens Missing Scale Bars
 #'
+#' Removes fish specimens that lack 10mm scale bar measurements, which are
+#' essential for normalizing morphological measurements. Specimens without
+#' scale bars cannot be properly measured or compared across the dataset.
 #'
+#' @param morph Data frame containing morphological data with fish_id, 
+#'   part_type (P/C), and Scale_10mm columns
+#' @return Data frame containing only fish specimens with scale bar measurements
 #'
+#' @details
+#' The function checks for scale bar presence in both part (P) and counterpart (C)
+#' specimens. Fish are retained if they have scale bars in either part or 
+#' counterpart. Detailed reports are written to:
+#' - data/flagged/fish_missing_scales_detailed.csv
+#' - data/flagged/fish_without_scales.csv  
+#' - data/raw/fish_with_scales.csv
 #'
-
-
+#' @examples
+#' morph_filtered <- flag_missing_scales(morph_with_ids)
 flag_missing_scales <- function(morph){
   # Check for missing scale information
   scale_summary <- morph %>%

@@ -16,7 +16,7 @@
 #'
 #' @examples
 #' cleaned_data <- handle_special_cases(raw_morph_data)
-handle_special_NAs <- function(data) {
+evolved_loss <- function(data) {
   # Validate input
   if (!is.data.frame(data)) {
     stop("Input must be a data frame")
