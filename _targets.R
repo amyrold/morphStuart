@@ -95,14 +95,28 @@ list(
   # ========================================================================= #
   
   tar_target(
-    name = morph_with_scales, 
+    name = flagged_fish_missing_scales,
     command = flag_missing_scales(morph_with_ids),
-    description = "Filter out fish specimens missing 10mm scale bars"
+    description = "Vector of fish_id values missing 10mm scale bar information"
+  ),
+  
+  # Uncomment and update the path to your colleague's file
+  tar_target(
+    name = updated_scales_file,
+    command = "data/raw/Results_missingscales.txt",  # or wherever you save it
+    format = "file",
+    description = "Updated scale measurements from colleague"
+  ),
+  
+  tar_target(
+    name = morph_with_scales, 
+    command = handle_missing_scales(morph_with_ids, flagged_fish_missing_scales, updated_scales_file), # Add updated_scales_file as 3rd arg if available
+    description = "Morphology data with scale issues resolved (updated or filtered)"
   ),
   
   tar_target(
     name = morph_corrected,
-    command = handle_special_NAs(morph_with_scales),
+    command = evolved_loss(morph_with_scales),
     description = "Apply biological logic to distinguish true zeros from missing data"
   ),
   
@@ -121,12 +135,6 @@ list(
   # ========================================================================= #
   # PALEO-ECOLOGICAL PROCESSING PIPELINE ----
   # ========================================================================= #
-  
-  # tar_target(
-  #   name = paleo_metadata,
-  #   command = extract_paleo_metadata(paleo_raw),
-  #   description = "Extract V-numbers, LSPEC codes, and sample type classification"
-  # ),
   
   tar_target(
     name = paleo_merged_counts,
@@ -155,8 +163,17 @@ list(
   #TODO build format_fieldorder()
   #TODO build identify_fieldorder_duplicates()
   #TODO build clean_fieldorder()
-  # TODO build flag_fieldorder()
-  tar_render(report, "report.Rmd")
+  #TODO build flag_fieldorder()
+  
+  # ========================================================================= #
+  # REPORT GENERATION ----
+  # ========================================================================= #
+  
+  tar_render(
+    name = report,
+    path = "results/report/report.Rmd",
+    output_dir = "results/report"
+  )
 )
 
 

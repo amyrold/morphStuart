@@ -12,9 +12,7 @@
 #' @examples
 #' var_map <- variable_mapping()
 #' continuous_vars <- var_map$continuous
-#' all_vars <- var_map$all
 variable_mapping <- function() {
-  # Define measurement types based on biological meaning and statistical properties
   continuous_vars <- c("SL", "CAV", "DS1", "DS2", "DS3", "LPT", 
                        "PSP.L", "PSP.R", "TPG", "ECT", "CLE", "PMX")
   
@@ -23,7 +21,6 @@ variable_mapping <- function() {
   binary_vars <- c("MDS1", "MDS2", "MDS3", "MDS1NA", 
                    "MDS2NA", "MDS3NA", "MPSPNA", "PGNA")
   
-  # Return as a named list for easy access
   return(list(
     continuous = continuous_vars,
     count = count_vars,
