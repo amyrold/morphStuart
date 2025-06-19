@@ -1,40 +1,34 @@
 #' Format and Standardize Field Order Data
 #'
-#' Converts raw field order data into standardized format with proper LSPEC IDs
-#' and numeric columns. Handles missing value indicators and creates standardized
-#' specimen identifiers for linking with morphology and paleo data.
+#' Formats field order data that has already had IDs extracted.
+#' Handles numeric column conversion and missing value indicators.
 #'
-#' @param data Raw field order data frame with L..SPEC column
-#' @return Data frame with standardized LSPEC, numeric columns, and original reference
+#' @param data Field order data frame with LSPEC already extracted
+#' @return Data frame with standardized columns and proper data types
 #'
 #' @examples
-#' formatted_data <- format_fieldorder(order_raw)
+#' formatted_data <- format_fieldorder(order_with_ids)
 format_fieldorder <- function(data) {
   if (!is.data.frame(data)) {
     stop("Input must be a data frame")
   }
-  if (!"L..SPEC" %in% names(data)) {
-    stop("Data must contain 'L..SPEC' column")
+  if (!"LSPEC" %in% names(data)) {
+    stop("Data must contain 'LSPEC' column (run extract_ids() first)")
   }
   
   # Format and standardize the data
   formatted <- data %>%
     mutate(
-      L_SPEC_original = `L..SPEC`,
-      # Extract base number (before any decimal) for standardized LSPEC
-      LSPEC_base_number = str_extract(as.character(L_SPEC_original), "^\\d+"),
-      LSPEC = case_when(
-        !is.na(LSPEC_base_number) ~ paste0("L", str_pad(LSPEC_base_number, 4, pad = "0")),
-        TRUE ~ NA_character_
-      ),
-      # Convert relevant columns to numeric with proper NA handling (suppress expected warnings)
+      # Convert relevant columns to numeric with proper NA handling
       CSTRAT = suppressWarnings(as.numeric(CSTRAT)),
       ISTRAT = suppressWarnings(as.numeric(ISTRAT)), 
       YEAR = suppressWarnings(as.numeric(YEAR)),
       INT = suppressWarnings(as.numeric(INT))
     ) %>%
     # Select only the columns needed for analysis
-    select(L_SPEC_original, LSPEC, CSTRAT, ISTRAT, YEAR, INT) %>%
+    select(L..SPEC, LSPEC, CSTRAT, ISTRAT, YEAR, INT) %>%
+    # Rename original column for clarity
+    rename(L_SPEC_original = L..SPEC) %>%
     # Remove any rows where LSPEC couldn't be created
     filter(!is.na(LSPEC), LSPEC != "LNA")
   

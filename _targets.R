@@ -21,7 +21,7 @@ library(tarchetypes)
 
 tar_option_set(
   packages = c("dplyr", "tidyr", "stringr", "tibble", "purrr", "ggplot2", "scales",
-               "vegan", "rioja", "readr"),
+               "vegan", "rioja", "readr", "knitr", "DT"),
   format = "rds",
   error = "continue"
 )
@@ -120,75 +120,36 @@ list(
   
   tar_target(
     name = fieldorder_formatted,
-    command = format_fieldorder(order_raw),
+    command = format_fieldorder(order_with_ids),
     description = "Format and standardize field order data with LSPEC IDs"
   ),
   
   tar_target(
-    name = fieldorder_quality_summary,
-    command = get_fieldorder_quality_summary(fieldorder_formatted),
-    description = "Data quality metrics for formatted field order data"
+    name = fieldorder_duplicates_processed,
+    command = process_fieldorder_duplicates(fieldorder_formatted),
+    description = "Remove conflicting duplicates, merge clean duplicates"
   ),
   
   tar_target(
-    name = fieldorder_duplicate_analysis,
-    command = identify_fieldorder_duplicates(fieldorder_formatted),
-    description = "Analysis of duplicate LSPECs and potential conflicts"
-  ),
-  
-  tar_target(
-    name = fieldorder_lspec_classification,
-    command = classify_lspecs(fieldorder_duplicate_analysis, fieldorder_formatted),
-    description = "Classification of LSPECs into problematic vs clean categories"
-  ),
-  
-  tar_target(
-    name = fieldorder_clean,
-    command = clean_fieldorder(fieldorder_formatted, fieldorder_lspec_classification$problematic_lspecs),
-    description = "Clean field order dataset with conflicts removed and duplicates merged"
-  ),
-  
-  tar_target(
-    name = fieldorder_missing_data,
-    command = identify_missing_data_records(fieldorder_clean),
-    description = "Records with missing key data (but no conflicts)"
-  ),
-  
-  tar_target(
-    name = fieldorder_flagged,
-    command = flag_fieldorder(fieldorder_formatted, fieldorder_duplicate_analysis, fieldorder_missing_data),
-    description = "Comprehensive flagged dataset for manual review"
+    name = fieldorder_final,
+    command = handle_fieldorder_missing_data(fieldorder_duplicates_processed),
+    description = "Separate complete records from those with missing data"
   ),
   
   tar_target(
     name = fieldorder_processing_summary,
-    command = generate_fieldorder_summary(fieldorder_formatted, fieldorder_clean, fieldorder_flagged, "PitLMorph_fieldorder.csv"),
+    command = summarize_fieldorder_processing(
+      fieldorder_formatted, 
+      fieldorder_duplicates_processed, 
+      fieldorder_final,
+      "PitLMorph_fieldorder.csv"
+    ),
     description = "Complete processing summary with statistics and quality metrics"
   ),
   
   # ========================================================================= #
   # REPORT SUMMARIES & VISUALIZATIONS ----
   # ========================================================================= #
-  
-  # Essential processing summaries for report
-  tar_target(
-    name = report_morphology_summary,
-    command = morphology_processing_summary(morph_raw, morph_with_ids, morph_with_scales, 
-                                            morph_non_overlap, morph_final),
-    description = "Morphology processing pipeline summary table"
-  ),
-  
-  tar_target(
-    name = report_paleo_summary,
-    command = paleo_processing_summary(paleo_raw, paleo_merged_counts),
-    description = "Paleo-ecology processing summary table"
-  ),
-  
-  tar_target(
-    name = report_fieldorder_summary,
-    command = fieldorder_summary_table(fieldorder_processing_summary),
-    description = "Field order processing summary table"
-  ),
   
   # Essential data quality summaries
   tar_target(
@@ -210,30 +171,6 @@ list(
     description = "Microfossil type distribution plot"
   ),
   
-  tar_target(
-    name = plot_fieldorder_completeness,
-    command = fieldorder_completeness_plot(fieldorder_completeness_table(fieldorder_processing_summary)),
-    description = "Field order completeness plot"
-  ),
-  
-  tar_target(
-    name = plot_stratigraphic_distribution,
-    command = stratigraphic_distribution_plot(fieldorder_clean),
-    description = "Stratigraphic level distribution plot"
-  ),
-  
-  tar_target(
-    name = plot_age_distribution,
-    command = age_distribution_plot(fieldorder_clean),
-    description = "Age distribution plot"
-  ),
-  
-  tar_target(
-    name = plot_age_depth,
-    command = age_depth_relationship_plot(fieldorder_clean),
-    description = "Age-depth relationship plot"
-  ),
-  
   # Plot file outputs for key visualizations
   tar_target(
     name = file_completeness_plot,
@@ -247,34 +184,6 @@ list(
     command = save_plot(plot_microfossil_types, "results/plots/microfossil_types.png", width = 10, height = 6),
     format = "file",
     description = "Microfossil types plot file"
-  ),
-  
-  tar_target(
-    name = file_fieldorder_completeness_plot,
-    command = save_plot(plot_fieldorder_completeness, "results/plots/fieldorder_completeness.png", width = 10, height = 6),
-    format = "file",
-    description = "Field order completeness plot file"
-  ),
-  
-  tar_target(
-    name = file_stratigraphic_plot,
-    command = save_plot(plot_stratigraphic_distribution, "results/plots/stratigraphic_distribution.png", width = 10, height = 6),
-    format = "file",
-    description = "Stratigraphic distribution plot file"
-  ),
-  
-  tar_target(
-    name = file_age_distribution_plot,
-    command = save_plot(plot_age_distribution, "results/plots/age_distribution.png", width = 10, height = 6),
-    format = "file",
-    description = "Age distribution plot file"
-  ),
-  
-  tar_target(
-    name = file_age_depth_plot,
-    command = save_plot(plot_age_depth, "results/plots/age_depth_relationship.png", width = 10, height = 6),
-    format = "file",
-    description = "Age-depth relationship plot file"
   ),
   
   # ========================================================================= #
