@@ -6,7 +6,7 @@
 #'
 #' @param paleo Raw paleo data frame with individual microscopy line counts
 #' @param microfossil_type Type of microfossil to process (default NULL = all types)
-#' @return Data frame with merged counts per sample + taxonomic identity
+#' @return Data frame with merged counts per sample + taxonomic identity + metadata
 #'
 #' @examples
 #' merged_counts <- merge_microscopy_counts(raw_paleo)
@@ -33,6 +33,16 @@ merge_microscopy_counts <- function(paleo, microfossil_type = NULL) {
     types_to_process <- microfossil_type
   }
   
+  # First get unique sample metadata (preserve LSPEC, V_number, sample_type if they exist)
+  metadata_cols <- intersect(names(paleo), c("LSPEC", "V_number", "sample_type"))
+  
+  if (length(metadata_cols) > 0) {
+    sample_metadata <- paleo %>%
+      select(Sample_ID, all_of(metadata_cols)) %>%
+      distinct()
+  }
+  
+  # Merge counts by complete taxonomic identity
   merged_counts <- paleo %>%
     filter(Microfossil_Type %in% types_to_process) %>%
     group_by(Sample_ID, Microfossil_Type, Morphotype, Genus_Type, Species, Variety) %>%
@@ -42,6 +52,12 @@ merge_microscopy_counts <- function(paleo, microfossil_type = NULL) {
       .groups = "drop"
     ) %>%
     filter(Count > 0)
+  
+  # Add back metadata if available
+  if (length(metadata_cols) > 0) {
+    merged_counts <- merged_counts %>%
+      left_join(sample_metadata, by = "Sample_ID")
+  }
   
   return(merged_counts)
 }
