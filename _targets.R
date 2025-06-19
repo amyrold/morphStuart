@@ -39,39 +39,21 @@ list(
     command = "data/raw/020625_PitLMorph.csv",
     format = "file",
     description = "Raw morphological measurements CSV file"
-  ),
-  
-  tar_target(
-    name = morph_raw,
-    command = read.csv(morph_file),
-    description = "Raw morphological data (fish measurements, P/CP pairs)"
-  ),
+  ), tar_target(name = morph_raw, command = read.csv(morph_file)),
   
   tar_target(
     name = paleo_file,
     command = "data/raw/060625_paleoeco_seriesL.csv", 
     format = "file",
     description = "Raw paleo-ecological microfossil counts CSV file"
-  ),
-  
-  tar_target(
-    name = paleo_raw,
-    command = read.csv(paleo_file),
-    description = "Raw paleo-ecological data (microscopy line counts)"
-  ),
+  ), tar_target(name = paleo_raw, command = read.csv(paleo_file)),
   
   tar_target(
     name = order_file,
     command = "data/raw/PitLMorph_fieldorder.csv",
     format = "file", 
     description = "Field order reference data CSV file"
-  ),
-  
-  tar_target(
-    name = order_raw,
-    command = read.csv(order_file),
-    description = "Field collection order reference data"
-  ),
+  ), tar_target(name = order_raw, command = read.csv(order_file)),
   
   # ========================================================================= #
   # EXTRACT STANDARDIZED IDs ----
@@ -132,25 +114,6 @@ list(
     description = "Merge 4-5 microscopy line counts per geological sample"
   ),
   
-  # TODO confirm whether there are any other transformations to make to paleo data before creating summary table
-  # tar_target(
-  #   name = paleo_species_matrix,
-  #   command = create_species_matrix(paleo_merged_counts),
-  #   description = "Species-level matrix with individual taxa as columns"
-  # ),
-  # 
-  # tar_target(
-  #   name = paleo_species_export,
-  #   command = export_species_results(paleo_species_matrix, "species_level", "data/processed/"),
-  #   description = "Export species-level results for colleague review"
-  # ),
-  
-  # tar_target( #TODO update morph_final -> paleo eco and move to analysis
-  #   name = paleo_with_ages,
-  #   command = integrate_age_data(paleo_metadata, morph_final),
-  #   description = "Link paleo samples to stratigraphic depths and ages via LSPEC"
-  # ),
-  
   # ========================================================================= #
   # FIELD ORDER PROCESSING PIPELINE ----
   # ========================================================================= #
@@ -207,7 +170,7 @@ list(
   # REPORT SUMMARIES & VISUALIZATIONS ----
   # ========================================================================= #
   
-  # Processing summaries
+  # Essential processing summaries for report
   tar_target(
     name = report_morphology_summary,
     command = morphology_processing_summary(morph_raw, morph_with_ids, morph_with_scales, 
@@ -227,69 +190,14 @@ list(
     description = "Field order processing summary table"
   ),
   
-  # Data quality summaries
-  tar_target(
-    name = report_scale_summary,
-    command = scale_availability_summary(flagged_fish_missing_scales, morph_with_ids),
-    description = "Scale bar availability summary"
-  ),
-  
-  tar_target(
-    name = report_part_summary,
-    command = part_counterpart_summary(morph_with_ids, morph_final),
-    description = "Part vs counterpart distribution summary"
-  ),
-  
+  # Essential data quality summaries
   tar_target(
     name = report_completeness_data,
     command = data_completeness_summary(morph_final),
     description = "Data completeness summary by variable"
   ),
   
-  tar_target(
-    name = report_microfossil_summary,
-    command = microfossil_type_summary(paleo_merged_counts),
-    description = "Microfossil type distribution summary"
-  ),
-  
-  tar_target(
-    name = report_sample_type_summary,
-    command = sample_type_summary(paleo_with_ids),
-    description = "Sample type classification summary"
-  ),
-  
-  tar_target(
-    name = report_fieldorder_quality,
-    command = fieldorder_quality_table(fieldorder_processing_summary),
-    description = "Field order data quality summary"
-  ),
-  
-  tar_target(
-    name = report_fieldorder_completeness,
-    command = fieldorder_completeness_table(fieldorder_processing_summary),
-    description = "Field order completeness summary"
-  ),
-  
-  tar_target(
-    name = report_duplicate_summary,
-    command = duplicate_analysis_summary(fieldorder_lspec_classification),
-    description = "Duplicate analysis summary"
-  ),
-  
-  # Integration summaries
-  tar_target(
-    name = report_integration_summary,
-    command = lspec_integration_summary(morph_final, paleo_with_ids),
-    description = "LSPEC integration potential summary"
-  ),
-  
-  tar_target(
-    name = report_pipeline_status,
-    command = pipeline_status_summary(morph_final, paleo_merged_counts),
-    description = "Final pipeline status summary"
-  ),
-  
-  # Visualizations
+  # Essential visualizations for report
   tar_target(
     name = plot_completeness,
     command = completeness_plot(report_completeness_data),
@@ -298,20 +206,14 @@ list(
   
   tar_target(
     name = plot_microfossil_types,
-    command = microfossil_type_plot(report_microfossil_summary),
+    command = microfossil_type_plot(microfossil_type_summary(paleo_merged_counts)),
     description = "Microfossil type distribution plot"
   ),
   
   tar_target(
     name = plot_fieldorder_completeness,
-    command = fieldorder_completeness_plot(report_fieldorder_completeness),
+    command = fieldorder_completeness_plot(fieldorder_completeness_table(fieldorder_processing_summary)),
     description = "Field order completeness plot"
-  ),
-  
-  tar_target(
-    name = plot_flag_breakdown,
-    command = flag_breakdown_plot(fieldorder_flagged),
-    description = "Flag category breakdown plot"
   ),
   
   tar_target(
@@ -332,9 +234,7 @@ list(
     description = "Age-depth relationship plot"
   ),
   
-  
-  
-  # Plot file outputs
+  # Plot file outputs for key visualizations
   tar_target(
     name = file_completeness_plot,
     command = save_plot(plot_completeness, "results/plots/completeness.png", width = 10, height = 6),
@@ -354,13 +254,6 @@ list(
     command = save_plot(plot_fieldorder_completeness, "results/plots/fieldorder_completeness.png", width = 10, height = 6),
     format = "file",
     description = "Field order completeness plot file"
-  ),
-  
-  tar_target(
-    name = file_flag_breakdown_plot,
-    command = save_plot(plot_flag_breakdown, "results/plots/flag_breakdown.png", width = 10, height = 6),
-    format = "file",
-    description = "Flag breakdown plot file"
   ),
   
   tar_target(
@@ -394,5 +287,3 @@ list(
     output_dir = "results/report"
   )
 )
-
-

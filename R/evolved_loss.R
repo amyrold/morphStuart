@@ -61,7 +61,13 @@ evolved_loss <- function(data) {
           TRUE ~ TPG
         )
       )
+    
   }
+  
+  # Remove binary logic columns after applying transformations
+  var_map <- variable_mapping()
+  cols_to_keep <- setdiff(names(cleaned), var_map$binary)
+  cleaned <- cleaned %>% select(all_of(cols_to_keep))
   
   return(as.data.frame(cleaned))
 }

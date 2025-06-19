@@ -123,8 +123,11 @@ part_counterpart_summary <- function(morph_with_ids, morph_final) {
 data_completeness_summary <- function(morph_final) {
   var_map <- variable_mapping()
   
+  # Only use quantitative variables (continuous + count) since binary columns are removed
+  analysis_vars <- c(var_map$continuous, var_map$count)
+  
   completeness <- morph_final %>%
-    select(all_of(var_map$all)) %>%
+    select(all_of(analysis_vars)) %>%
     summarise_all(~sum(!is.na(.)) / n() * 100) %>%
     pivot_longer(everything(), names_to = "Variable", values_to = "Completeness") %>%
     arrange(desc(Completeness))
