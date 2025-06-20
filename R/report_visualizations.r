@@ -243,16 +243,26 @@ age_depth_relationship_plot <- function(fieldorder_clean) {
 #' Save Plot to File
 #'
 #' @param plot ggplot object
-#' @param filename Output filename 
+#' @param filename Output filename (extension determines format)
 #' @param width Plot width in inches
 #' @param height Plot height in inches
-#' @param dpi Resolution in dots per inch
+#' @param dpi Resolution in dots per inch (ignored for SVG)
 #' @return File path
 save_plot <- function(plot, filename, width = 10, height = 6, dpi = 300) {
   if (!dir.exists(dirname(filename))) {
     dir.create(dirname(filename), recursive = TRUE)
   }
   
-  ggsave(filename, plot, width = width, height = height, dpi = dpi)
+  # Detect format from file extension
+  file_ext <- tools::file_ext(filename)
+  
+  if (tolower(file_ext) == "svg") {
+    # For SVG, don't use dpi parameter
+    ggsave(filename, plot, width = width, height = height, device = "svg")
+  } else {
+    # For other formats (PNG, PDF, etc.), include dpi
+    ggsave(filename, plot, width = width, height = height, dpi = dpi)
+  }
+  
   return(filename)
 }

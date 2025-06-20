@@ -1,8 +1,0 @@
-"step_name","timestamp","input_rows","input_fish","output_rows","output_fish","files_created","warnings"
-"Paleo Data Import",2025-06-10 17:10:16.669489,24540,NA,NA,NA,"",""
-"Paleo Metadata Extraction",2025-06-10 17:10:16.719941,24540,NA,59,NA,"",""
-"Microscopy Count Merging",2025-06-10 17:10:16.882761,24540,NA,922,NA,"",""
-"Age Data Integration",2025-06-10 17:10:17.188372,59,NA,59,NA,"",""
-"Rioja Matrix Creation",2025-06-10 17:10:17.261815,922,NA,40,NA,"",""
-"Paleo Results Export",2025-06-10 17:10:17.561597,40,NA,NA,NA,"/Users/blue/GitHub/morphStuart/data/intermediate//diatom_analysis_summary_table.csv; /Users/blue/GitHub/morphStuart/data/intermediate//diatom_analysis_taxa_for_grouping.csv; /Users/blue/GitHub/morphStuart/data/intermediate//diatom_analysis_sample_info.csv; /Users/blue/GitHub/morphStuart/data/intermediate//diatom_analysis_processing_metadata.txt",""
-"Age Data Merging",2025-06-10 18:39:13.911228,2358,2358,2358,2358,"",""
