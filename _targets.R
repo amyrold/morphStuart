@@ -270,7 +270,7 @@ list(
     name = turnover_heatmap,
     command = visualize_turnover_heatmap(turnover_matrix),
     description = "Heatmap of pairwise turnover between time bins"
-  )
+  ),
   
   # ========================================================================= #
   # REPORT GENERATION ----
