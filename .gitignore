@@ -57,3 +57,6 @@ data/processed
 # Result files
 results/
 
+# Targets
+_targets/
+
