@@ -231,6 +231,46 @@ list(
     format = "file",
     description = "Microfossil types plot file"
   ),
+
+  # ========================================================================= #
+  # PALEO COMMUNITY ECOLOGY ----
+  # ========================================================================= #
+
+  tar_target(
+    name = aggregated_taxa,
+    command = aggregate_taxa_by_level(paleo_summary_table, level = "full"),
+    description = "Aggregate taxa by taxonomic level or custom groupings"
+  ),
+
+  tar_target(
+    name = filtered_taxa, 
+    command = filter_rare_taxa(aggregated_taxa, threshold = 0.10),
+    description = "Filter out rare taxa below occurrence threshold"
+  ),
+
+  tar_target(
+    name = community_metrics,
+    command = calculate_community_metrics(filtered_taxa, evenness_index = "pielou"),
+    description = "Calculate richness, evenness, and beta diversity by time bin"
+  ),
+
+  tar_target(
+    name = turnover_matrix,
+    command = calculate_pairwise_turnover(filtered_taxa, method = "bray"),
+    description = "Pairwise beta diversity matrix between all time bins"
+  ),
+
+  tar_target(
+    name = trends_plot,
+    command = visualize_community_trends(community_metrics),
+    description = "Time series visualization of community metrics"
+  ),
+
+  tar_target(
+    name = turnover_heatmap,
+    command = visualize_turnover_heatmap(turnover_matrix),
+    description = "Heatmap of pairwise turnover between time bins"
+  )
   
   # ========================================================================= #
   # REPORT GENERATION ----
