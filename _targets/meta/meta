@@ -40,11 +40,7 @@ plot_microfossil_types|stem|47d74a7b1d7b7546|878c772ed5c7e223|2e145f2419230aa9|1
 plot_fieldorder_completeness|stem|84a9bc2f12f30a7d|0b7a090a34035164|c8b9c9b8d10adcb4|753586116||t20258.5888012357s|s181227b|181227|rds|local|vector|||0.015||
 file_fieldorder_completeness_plot|stem|55952dc1f70bd283|b4093a7791778377|0e9de9426fbe25cd|-562603572|results/plots/fieldorder_completeness.png|t20258.5888026686s|s166025b|166025|file|local|vector|||0.106||
 morph_corrected|stem|446c69e0cbdedf03|511ba1f656a4fe31|0ea4b8b66b489517|-399856020||t20258.6503460076s|s158745b|158745|rds|local|vector|||0.021||
-morph_non_overlap|stem|c2300b93fe0dbb42|f14c3563b53ce2d7|78ce78f4fd2ae9ff|1146758850||t20258.6503543302s|s136281b|136281|rds|local|vector|||0.691||
-morph_final|stem|948afc882e251865|0fe3160a744141f9|a12e2bce1138c804|-89470372||t20258.6503930001s|s128734b|128734|rds|local|vector|||3.307||
 report_morphology_summary|stem|e06802e758569862|7b4f78a6a18d5730|2b37195349b5332d|628481108||t20258.650393343s|s229b|229|rds|local|vector|||0.005||
-report_completeness_data|stem|c405682629ece282|c58272538cf11666|92fd98f6a3569961|516235355||t20258.651666485s|s332b|332|rds|local|vector|||0.017||
-plot_completeness|stem|9deb94c7bdbbf8b6|3638662686136336|930d8d2e3c23486e|160619606||t20258.6516670318s|s114458b|114458|rds|local|vector|||0.007||
 classify_lspecs|function|b6084cb407fb48df
 clean_fieldorder|function|67088ac8b2b3d62c
 generate_fieldorder_summary|function|0f599657bcc2ded6
@@ -63,7 +59,8 @@ rioja_species_matrix_full|stem|8b307efb77534555|0f2d51e1368f48f9|954f601a684ad58
 rioja_depth_data|stem|6fab34cbcb371375|c3e06db586c8a175|2c219cce927c6e2b|1657981121||t20259.1410613646s|s547b|547|rds|local|vector|||0.013||
 paleo_summary_table|stem|0100fa00354e5d96|2883243b45daaf82|745eca54757d4932|-214424487||t20259.1410618979s|s5784b|5784|rds|local|vector|||0.035||
 rioja_species_matrix|stem|4c0545b6928f680a|25341ab626f9620d|954f601a684ad581|1780833088||t20259.1509276087s|s2222b|2222|rds|local|vector|||0.037||
-report|stem|959be5ff7d267eff|e4e9ae1363f1aadd|e40480a70c0971f5|787668912|results/report/report.html*results/report/report.Rmd|t20259.1556256407s|s3389919b|3389919|file|local|vector|||6.578||
+file_microfossil_plot|stem|f00d1f60031e446e|c733c74e7688ebc4|eea542de3c772e03|-546021822|results/plots/microfossil_types.png|t20259.5482851723s|s176909b|176909|file|local|vector|||0.115||
+rioja_strat_plots|stem|a5058ef5cec6e865|23ddcfe3a70204c6|2da29e0d79b386c2|1440172854||t20259.5482947935s|s3755b|3755|rds|local|vector|||0.811||
 create_species_label|function|cf48b289e51648dc
 fieldorder_completeness_table|function|abea2ccabcd98424
 sample_type_summary|function|da9030e9fd114f3e
@@ -114,6 +111,9 @@ merge_counter_parts|function|f78808c670a03bd4
 prepare_rioja_species_data|function|ef12ca57bfd66183
 handle_missing_scales|function|d9c92f72bf41d482
 extract_ids|function|9d0f578928a0fdce
-file_microfossil_plot|stem|f00d1f60031e446e|c733c74e7688ebc4|eea542de3c772e03|-546021822|results/plots/microfossil_types.png|t20259.5482851723s|s176909b|176909|file|local|vector|||0.115||
-rioja_strat_plots|stem|a5058ef5cec6e865|23ddcfe3a70204c6|2da29e0d79b386c2|1440172854||t20259.5482947935s|s3755b|3755|rds|local|vector|||0.811||
-file_completeness_plot|stem|ea2d4fd37ff6591a|78eb4c6f92c850d7|7900272a40782fc3|1038126081|results/plots/completeness.png|t20259.5482962433s|s187518b|187518|file|local|vector|||0.1||
+morph_non_overlap|stem|bad9faec2b0fd57e|7851f60fe6269eab|78ce78f4fd2ae9ff|1146758850||t20259.6901324411s|s136944b|136944|rds|local|vector|||0.681||
+morph_final|stem|37463dfaed1feb1c|0fe3160a744141f9|b4aca16fbb3b747f|-89470372||t20259.6901701566s|s129095b|129095|rds|local|vector|||3.232||
+report_completeness_data|stem|b65ff1d60a03bea9|c58272538cf11666|8684bc7c05ddff3e|516235355||t20259.6901705775s|s313b|313|rds|local|vector|||0.006||
+plot_completeness|stem|c3c57d6bbe49d796|3638662686136336|d865de80f96b8874|160619606||t20259.6901710533s|s115344b|115344|rds|local|vector|||0.008||
+report|stem|5a89ba3c3bac29a5|e4e9ae1363f1aadd|8ff62e404265f9cd|787668912|results/report/report.html*results/report/report.Rmd|t20259.6902498357s|s3389932b|3389932|file|local|vector|||6.748||
+file_completeness_plot|stem|f3a15bdad0f1b071|78eb4c6f92c850d7|d8c4be87a88f6f1a|1038126081|results/plots/completeness.png|t20259.6902516636s|s187526b|187526|file|local|vector|||0.089||

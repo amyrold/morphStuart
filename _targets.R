@@ -94,7 +94,7 @@ list(
   
   tar_target(
     name = morph_non_overlap,
-    command = flag_counterpart_conflicts(morph_corrected, threshold = 0.05),
+    command = flag_counterpart_conflicts(morph_corrected, threshold = 0.10),
     description = "Flag and remove fish with conflicting part/counterpart measurements"
   ),
   
