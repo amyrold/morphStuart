@@ -12,8 +12,9 @@
 #' metrics <- calculate_community_metrics(filtered_data)
 #' metrics_simpson <- calculate_community_metrics(filtered_data, evenness_index = "simpson")
 calculate_community_metrics <- function(data, 
-                                       evenness_index = "pielou",
-                                       diversity_indices = c("shannon", "simpson")) {
+                                        evenness_index = "pielou",
+                                        diversity_indices = c("shannon", "simpson"),
+                                        time_column = "YEAR") {
   if (!is.data.frame(data)) {
     stop("Input must be a data frame")
   }
@@ -29,25 +30,32 @@ calculate_community_metrics <- function(data,
   if (length(taxa_cols) == 0) {
     stop("No taxa columns found in data")
   }
-  if (!"CSTRAT" %in% available_metadata) {
-    stop("CSTRAT column required for time bin analysis")
+  if (!time_column %in% available_metadata) {
+    # Try fallback options
+    fallback_options <- c("YEAR", "CSTRAT")
+    available_time <- intersect(fallback_options, available_metadata)
+    if (length(available_time) == 0) {
+      stop("No time column found. Need YEAR or CSTRAT column for time bin analysis")
+    }
+    time_column <- available_time[1]
+    warning(paste("Requested time column not found, using", time_column))
   }
   
   # Prepare community matrix (samples x species)
   community_matrix <- data %>%
-    select(LSPEC, CSTRAT, all_of(taxa_cols)) %>%
-    arrange(CSTRAT)
+    select(LSPEC, all_of(time_column), all_of(taxa_cols)) %>%
+    arrange(.data[[time_column]])
   
-  # Check if we need to pool samples by CSTRAT
-  cstrat_counts <- community_matrix %>%
-    count(CSTRAT) %>%
+  # Check if we need to pool samples by time_column
+  time_counts <- community_matrix %>%
+    count(.data[[time_column]]) %>%
     filter(n > 1)
   
-  if (nrow(cstrat_counts) > 0) {
-    # Pool samples with same CSTRAT
-    cat("Pooling", sum(cstrat_counts$n), "samples with duplicate CSTRAT values\n")
+  if (nrow(time_counts) > 0) {
+    # Pool samples with same time value
+    cat("Pooling", sum(time_counts$n), "samples with duplicate", time_column, "values\n")
     community_matrix <- community_matrix %>%
-      group_by(CSTRAT) %>%
+      group_by(.data[[time_column]]) %>%
       summarise(
         across(all_of(taxa_cols), sum, na.rm = TRUE),
         .groups = "drop"
@@ -59,7 +67,7 @@ calculate_community_metrics <- function(data,
     select(all_of(taxa_cols)) %>%
     as.matrix()
   
-  rownames(species_matrix) <- community_matrix$CSTRAT
+  rownames(species_matrix) <- community_matrix[[time_column]]
   
   # Calculate basic richness
   richness <- vegan::specnumber(species_matrix)
@@ -78,33 +86,39 @@ calculate_community_metrics <- function(data,
   
   # Combine results
   metrics_data <- data.frame(
-    CSTRAT = community_matrix$CSTRAT,
+    time_value = community_matrix[[time_column]],
     richness = richness,
     evenness = evenness,
     total_abundance = total_abundance,
     stringsAsFactors = FALSE
   )
   
+  # Set proper column name for time
+  names(metrics_data)[1] <- time_column
+  
   # Add diversity indices
   for (div_name in names(diversity_results)) {
     metrics_data[[div_name]] <- diversity_results[[div_name]]
   }
   
-  # Add temporal information if available
-  if ("YEAR" %in% names(data)) {
-    year_data <- data %>%
-      select(CSTRAT, YEAR) %>%
+  # Add other temporal information if available and different from time_column
+  other_time_cols <- intersect(c("YEAR", "CSTRAT"), names(data))
+  other_time_cols <- setdiff(other_time_cols, time_column)
+  
+  if (length(other_time_cols) > 0) {
+    time_data <- data %>%
+      select(all_of(c(time_column, other_time_cols))) %>%
       distinct() %>%
-      group_by(CSTRAT) %>%
-      summarise(YEAR = first(YEAR), .groups = "drop")
+      group_by(.data[[time_column]]) %>%
+      summarise(across(everything(), first), .groups = "drop")
     
     metrics_data <- metrics_data %>%
-      left_join(year_data, by = "CSTRAT")
+      left_join(time_data, by = time_column)
   }
   
-  # Sort by stratigraphic order
+  # Sort by time order
   metrics_data <- metrics_data %>%
-    arrange(CSTRAT)
+    arrange(.data[[time_column]])
   
   # Report results
   cat("Community Metrics Calculated:\n")
@@ -127,22 +141,22 @@ calculate_evenness <- function(species_matrix, evenness_index) {
   richness <- vegan::specnumber(species_matrix)
   
   evenness_values <- switch(evenness_index,
-    "pielou" = {
-      shannon <- vegan::diversity(species_matrix, index = "shannon")
-      shannon / log(richness)
-    },
-    "simpson" = {
-      simpson <- vegan::diversity(species_matrix, index = "simpson")
-      simpson / (1 - 1/richness)
-    },
-    "custom" = {
-      # Custom evenness calculation - can be modified as needed
-      shannon <- vegan::diversity(species_matrix, index = "shannon")
-      shannon / log(richness)
-    },
-    {
-      stop(paste("Unknown evenness index:", evenness_index))
-    }
+                            "pielou" = {
+                              shannon <- vegan::diversity(species_matrix, index = "shannon")
+                              shannon / log(richness)
+                            },
+                            "simpson" = {
+                              simpson <- vegan::diversity(species_matrix, index = "simpson")
+                              simpson / (1 - 1/richness)
+                            },
+                            "custom" = {
+                              # Custom evenness calculation - can be modified as needed
+                              shannon <- vegan::diversity(species_matrix, index = "shannon")
+                              shannon / log(richness)
+                            },
+                            {
+                              stop(paste("Unknown evenness index:", evenness_index))
+                            }
   )
   
   # Handle cases where richness = 1 (evenness is undefined)

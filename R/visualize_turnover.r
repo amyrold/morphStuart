@@ -13,9 +13,9 @@
 #' heatmap <- visualize_turnover_heatmap(turnover_matrix)
 #' heatmap_clustered <- visualize_turnover_heatmap(turnover_matrix, cluster_order = TRUE)
 visualize_turnover_heatmap <- function(turnover_result, 
-                                     color_palette = "viridis",
-                                     show_values = FALSE,
-                                     cluster_order = FALSE) {
+                                       color_palette = "viridis",
+                                       show_values = FALSE,
+                                       cluster_order = FALSE) {
   if (!is.list(turnover_result) || !"formatted_matrix" %in% names(turnover_result)) {
     stop("Input must be output from calculate_pairwise_turnover()")
   }
@@ -34,25 +34,29 @@ visualize_turnover_heatmap <- function(turnover_result,
   
   # Convert matrix to long format for ggplot
   heatmap_data <- expand.grid(
-    CSTRAT_1 = rownames(turnover_matrix),
-    CSTRAT_2 = colnames(turnover_matrix),
+    Time_1 = rownames(turnover_matrix),
+    Time_2 = colnames(turnover_matrix),
     stringsAsFactors = FALSE
   ) %>%
     mutate(
       turnover = as.vector(turnover_matrix),
-      CSTRAT_1 = factor(CSTRAT_1, levels = rownames(turnover_matrix)),
-      CSTRAT_2 = factor(CSTRAT_2, levels = colnames(turnover_matrix))
+      Time_1 = factor(Time_1, levels = rownames(turnover_matrix)),
+      Time_2 = factor(Time_2, levels = colnames(turnover_matrix))
     )
   
+  # Determine axis labels based on row names (could be YEAR or CSTRAT values)
+  time_values <- as.numeric(rownames(turnover_matrix))
+  axis_label <- if (all(time_values > 1000, na.rm = TRUE)) "Age (years)" else "CSTRAT (cm)"
+  
   # Create base heatmap
-  p <- ggplot(heatmap_data, aes(x = CSTRAT_1, y = CSTRAT_2, fill = turnover)) +
+  p <- ggplot(heatmap_data, aes(x = Time_1, y = Time_2, fill = turnover)) +
     geom_tile() +
     labs(
       title = "Pairwise Community Turnover Between Time Bins",
       subtitle = paste("Method:", turnover_result$method, 
                        ifelse(turnover_result$binary, "(binary)", "(abundance)")),
-      x = "CSTRAT (cm)",
-      y = "CSTRAT (cm)",
+      x = axis_label,
+      y = axis_label,
       fill = "Turnover"
     ) +
     theme_minimal() +

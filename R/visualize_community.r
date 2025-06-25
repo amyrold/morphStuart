@@ -14,9 +14,9 @@
 #' trends_plot <- visualize_community_trends(community_metrics)
 #' trends_faceted <- visualize_community_trends(community_metrics, plot_type = "faceted")
 visualize_community_trends <- function(metrics_data, 
-                                     plot_type = "combined",
-                                     time_axis = "CSTRAT", 
-                                     smooth_method = "loess") {
+                                       plot_type = "combined",
+                                       time_axis = "YEAR", 
+                                       smooth_method = "loess") {
   if (!is.data.frame(metrics_data)) {
     stop("Input must be a data frame")
   }
