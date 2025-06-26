@@ -1,0 +1,29 @@
+paths:
+  raw_morph: "data/raw/020625_PitLMorph.csv"
+  raw_paleo: "data/raw/060625_paleoeco_seriesL.csv"
+  raw_order: "data/raw/PitLMorph_fieldorder.csv"
+  raw_missing_scales: "data/raw/Results_missingscales.txt"
+  output_dir: "results"
+  plot_dir: "results/plots"
+  report_dir: "results/report"
+  report_rmd: "results/report/report.Rmd"
+
+analysis:
+  conflict_threshold: 0.10
+  rioja_grouping_level: "morphotype"
+  community_evenness_index: "pielou"
+  time_column: "CSTRAT"
+  turnover_method: "bray"
+  rare_taxa_threshold: 0.10
+  community_trends_plot_type: "faceted"
+
+plots:
+  completeness_width: 10
+  completeness_height: 6
+  microfossil_width: 10
+  microfossil_height: 6
+  community_trends_width: 10
+  community_trends_height: 12
+  turnover_heatmap_width: 10
+  turnover_heatmap_height: 8
+  turnover_color_palette: "viridis"

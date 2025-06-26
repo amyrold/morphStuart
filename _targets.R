@@ -21,14 +21,30 @@ library(tarchetypes)
 
 tar_option_set(
   packages = c("dplyr", "tidyr", "stringr", "tibble", "purrr", "ggplot2", "scales",
-               "vegan", "rioja", "readr", "knitr", "DT"),
+               "vegan", "rioja", "readr", "knitr", "DT", "yaml"),
   format = "rds",
   error = "continue"
 )
 
 tar_source()
 
+# Load project configuration globally
+project_config <- yaml::read_yaml("config.yml")
+
 list(
+  
+  # ========================================================================= #
+  # CONFIGURATION TRACKER ----
+  # ========================================================================= #
+  # This target exists solely to track changes in config.yml
+  # It does not produce a value that is used by other targets.
+  tar_target(
+    name = config_file_tracker,
+    command = "config.yml",
+    format = "file",
+    description = "Tracks changes in the project configuration file"
+  ),
+
   
   # ========================================================================= #
   # DATA IMPORT ----
@@ -36,21 +52,21 @@ list(
   
   tar_target(
     name = morph_file,
-    command = "data/raw/020625_PitLMorph.csv",
+    command = project_config$paths$raw_morph,
     format = "file",
     description = "Raw morphological measurements CSV file"
   ), tar_target(name = morph_raw, command = read.csv(morph_file)),
   
   tar_target(
     name = paleo_file,
-    command = "data/raw/060625_paleoeco_seriesL.csv", 
-    format = "file",
+    command = project_config$paths$raw_paleo,
+    format = "file", 
     description = "Raw paleo-ecological microfossil counts CSV file"
   ), tar_target(name = paleo_raw, command = read.csv(paleo_file)),
   
   tar_target(
     name = order_file,
-    command = "data/raw/PitLMorph_fieldorder.csv",
+    command = project_config$paths$raw_order,
     format = "file", 
     description = "Field order reference data CSV file"
   ), tar_target(name = order_raw, command = read.csv(order_file)),
@@ -75,7 +91,7 @@ list(
   
   tar_target(
     name = updated_scales_file,
-    command = "data/raw/Results_missingscales.txt",
+    command = project_config$paths$raw_missing_scales,
     format = "file",
     description = "Updated scale measurements from colleague"
   ),
@@ -94,7 +110,7 @@ list(
   
   tar_target(
     name = morph_non_overlap,
-    command = flag_counterpart_conflicts(morph_corrected, threshold = 0.10),
+    command = flag_counterpart_conflicts(morph_corrected, threshold = project_config$analysis$conflict_threshold),
     description = "Flag and remove fish with conflicting part/counterpart measurements"
   ),
   
@@ -177,7 +193,7 @@ list(
   
   tar_target(
     name = rioja_species_matrix,
-    command = prepare_rioja_species_data(integrated_paleo_metadata, grouping_level = "morphotype"),
+    command = prepare_rioja_species_data(integrated_paleo_metadata, grouping_level = project_config$analysis$rioja_grouping_level),
     description = "Species matrix for rioja stratigraphic plots (full taxonomic resolution)"
   ),
   
@@ -220,14 +236,14 @@ list(
   # Plot file outputs for key visualizations
   tar_target(
     name = file_completeness_plot,
-    command = save_plot(plot_completeness, "results/plots/completeness.png", width = 10, height = 6),
+    command = save_plot(plot_completeness, file.path(project_config$paths$plot_dir, "completeness.png"), width = project_config$plots$completeness_width, height = project_config$plots$completeness_height),
     format = "file",
     description = "Data completeness plot file"
   ),
   
   tar_target(
     name = file_microfossil_plot,
-    command = save_plot(plot_microfossil_types, "results/plots/microfossil_types.png", width = 10, height = 6),
+    command = save_plot(plot_microfossil_types, file.path(project_config$paths$plot_dir, "microfossil_types.png"), width = project_config$plots$microfossil_width, height = project_config$plots$microfossil_height),
     format = "file",
     description = "Microfossil types plot file"
   ),
@@ -244,45 +260,45 @@ list(
   
   tar_target(
     name = filtered_taxa, 
-    command = filter_rare_taxa(aggregated_taxa, threshold = 0.10),
+    command = filter_rare_taxa(aggregated_taxa, threshold = project_config$analysis$rare_taxa_threshold),
     description = "Filter out rare taxa below occurrence threshold"
   ),
   
   tar_target(
     name = community_metrics,
-    command = calculate_community_metrics(filtered_taxa, evenness_index = "pielou", time_column = "CSTRAT"),
+    command = calculate_community_metrics(filtered_taxa, evenness_index = project_config$analysis$community_evenness_index, time_column = project_config$analysis$time_column),
     description = "Calculate richness, evenness, and beta diversity by time bin"
   ),
   
   tar_target(
     name = turnover_matrix,
-    command = calculate_pairwise_turnover(filtered_taxa, method = "bray", time_column = "CSTRAT"),
+    command = calculate_pairwise_turnover(filtered_taxa, method = project_config$analysis$turnover_method, time_column = project_config$analysis$time_column),
     description = "Pairwise beta diversity matrix between all time bins"
   ),
   
   tar_target(
     name = trends_plot,
-    command = visualize_community_trends(community_metrics, plot_type = "faceted"),
+    command = visualize_community_trends(community_metrics, plot_type = project_config$analysis$community_trends_plot_type),
     description = "Time series visualization of community metrics"
   ),
   
   tar_target(
     name = turnover_heatmap,
-    command = visualize_turnover_heatmap(turnover_matrix, color_palette = "viridis"),
+    command = visualize_turnover_heatmap(turnover_matrix, color_palette = project_config$plots$turnover_color_palette),
     description = "Heatmap of pairwise turnover between time bins"
   ),
   
   # Community ecology plot files
   tar_target(
     name = file_community_trends,
-    command = save_plot(trends_plot, "results/plots/community_trends.png", width = 10, height = 12),
+    command = save_plot(trends_plot, file.path(project_config$paths$plot_dir, "community_trends.png"), width = project_config$plots$community_trends_width, height = project_config$plots$community_trends_height),
     format = "file",
     description = "Community trends plot file"
   ),
   
   tar_target(
     name = file_turnover_heatmap,
-    command = save_plot(turnover_heatmap, "results/plots/turnover_heatmap.png", width = 10, height = 8),
+    command = save_plot(turnover_heatmap, file.path(project_config$paths$plot_dir, "turnover_heatmap.png"), width = project_config$plots$turnover_heatmap_width, height = project_config$plots$turnover_heatmap_height),
     format = "file",
     description = "Turnover heatmap plot file"
   ),
@@ -294,7 +310,7 @@ list(
   
   tar_render(
     name = report,
-    path = "results/report/report.Rmd",
-    output_dir = "results/report"
+    path = project_config$paths$report_rmd,
+    output_dir = project_config$paths$report_dir
   )
 )
