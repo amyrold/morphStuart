@@ -22,32 +22,32 @@ evolved_loss <- function(data) {
   }
   
   cleaned <- data %>%
-    as_tibble() %>%
-    mutate(
-      DS1 = case_when(
+    tibble::as_tibble() %>%
+    dplyr::mutate(
+      DS1 = dplyr::case_when(
         MDS1 == 0 & MDS1NA == 1 ~ NA_real_,
         MDS1 == 0 & MDS1NA == 0 & is.na(DS1) ~ 0,
         TRUE ~ DS1
       ),
-      DS2 = case_when(
+      DS2 = dplyr::case_when(
         MDS2 == 0 & MDS2NA == 1 ~ NA_real_,
         MDS2 == 0 & MDS2NA == 0 & is.na(DS2) ~ 0,
         TRUE ~ DS2
       ),
-      DS3 = case_when(
+      DS3 = dplyr::case_when(
         MDS3 == 0 & MDS3NA == 1 ~ NA_real_,
         MDS3 == 0 & MDS3NA == 0 & is.na(DS3) ~ 0,
         TRUE ~ DS3
       ),
-      MPT = case_when(
+      MPT = dplyr::case_when(
         MPT == 0 & (MDS1 == 1 | MDS2 == 1 | MDS3 == 1) ~ NA_real_,
         TRUE ~ MPT
       ),
-      PSP.L = case_when(
+      PSP.L = dplyr::case_when(
         MPSP == 0 & MPSPNA == 1 ~ NA_real_,
         TRUE ~ PSP.L
       ),
-      PSP.R = case_when(
+      PSP.R = dplyr::case_when(
         MPSP == 0 & MPSPNA == 1 ~ NA_real_,
         TRUE ~ PSP.R
       )
@@ -55,8 +55,8 @@ evolved_loss <- function(data) {
   
   if ("PGNA" %in% names(cleaned)) {
     cleaned <- cleaned %>%
-      mutate(
-        TPG = case_when(
+      dplyr::mutate(
+        TPG = dplyr::case_when(
           PGNA == 1 ~ NA_real_,
           TRUE ~ TPG
         )
@@ -67,7 +67,7 @@ evolved_loss <- function(data) {
   # Remove binary logic columns after applying transformations
   var_map <- variable_mapping()
   cols_to_keep <- setdiff(names(cleaned), var_map$binary)
-  cleaned <- cleaned %>% select(all_of(cols_to_keep))
+  cleaned <- cleaned %>% dplyr::select(dplyr::all_of(cols_to_keep))
   
   return(as.data.frame(cleaned))
 }

@@ -18,8 +18,8 @@ filter_stickleback_samples <- function(paleo_merged_counts) {
   
   # Filter to stickleback only
   stickleback_data <- paleo_merged_counts %>%
-    filter(sample_type == "Stickleback") %>%
-    filter(!is.na(LSPEC), LSPEC != "LXXXX")
+    dplyr::filter(sample_type == "Stickleback") %>%
+    dplyr::filter(!is.na(LSPEC), LSPEC != "LXXXX")
   
   # Report filtering results
   original_samples <- length(unique(paleo_merged_counts$Sample_ID))

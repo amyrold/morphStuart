@@ -38,22 +38,22 @@ extract_ids <- function(data) {
 #' @return Data frame with fish_id, LSPEC, part_type columns added
 extract_morph_ids <- function(data) {
   result <- data %>%
-    mutate(
-      fish_id = str_extract(ID, "^V\\d+"),
-      LSPEC_raw = str_extract(ID, "L\\d+[A-Za-z]?"),
-      LSPEC_number = str_extract(LSPEC_raw, "\\d+"),
-      LSPEC = case_when(
-        !is.na(LSPEC_number) ~ paste0("L", str_pad(LSPEC_number, 4, pad = "0")),
+    dplyr::mutate(
+      fish_id = stringr::str_extract(ID, "^V\\d+"),
+      LSPEC_raw = stringr::str_extract(ID, "L\\d+[A-Za-z]?"),
+      LSPEC_number = stringr::str_extract(LSPEC_raw, "\\d+"),
+      LSPEC = dplyr::case_when(
+        !is.na(LSPEC_number) ~ paste0("L", stringr::str_pad(LSPEC_number, 4, pad = "0")),
         TRUE ~ NA_character_
       ),
-      part_type_raw = str_extract(ID, "[PC]\\d*(?=\\.jpg$)"),
-      part_type = case_when(
-        str_starts(part_type_raw, "P") ~ "P",
+      part_type_raw = stringr::str_extract(ID, "[PC]\\d*(?=\\.jpg$)"),
+      part_type = dplyr::case_when(
+        stringr::str_starts(part_type_raw, "P") ~ "P",
         part_type_raw == "C" ~ "C",
         TRUE ~ part_type_raw
       )
     ) %>%
-    select(-LSPEC_raw, -LSPEC_number, -part_type_raw)
+    dplyr::select(-LSPEC_raw, -LSPEC_number, -part_type_raw)
   
   return(result)
 }
@@ -66,22 +66,22 @@ extract_morph_ids <- function(data) {
 #' @return Original data frame with V_number, LSPEC, sample_type columns added
 extract_paleo_ids <- function(data) {
   result <- data %>%
-    mutate(
-      V_number = str_extract(Sample_ID, "V\\d+"),
-      L_number_raw = str_extract(Sample_ID, "L\\w+"),
-      L_digits = str_extract(Sample_ID, "(?<=L)\\d+"),
-      LSPEC = case_when(
-        !is.na(L_digits) ~ paste0("L", str_pad(L_digits, 4, pad = "0")),
-        str_detect(Sample_ID, "LXXXX") ~ "LXXXX",
+    dplyr::mutate(
+      V_number = stringr::str_extract(Sample_ID, "V\\d+"),
+      L_number_raw = stringr::str_extract(Sample_ID, "L\\w+"),
+      L_digits = stringr::str_extract(Sample_ID, "(?<=L)\\d+"),
+      LSPEC = dplyr::case_when(
+        !is.na(L_digits) ~ paste0("L", stringr::str_pad(L_digits, 4, pad = "0")),
+        stringr::str_detect(Sample_ID, "LXXXX") ~ "LXXXX",
         TRUE ~ L_number_raw
       ),
-      sample_type = case_when(
-        str_detect(Sample_ID, "LXXXX") ~ "Killifish",
-        str_detect(Sample_ID, "L\\d+") ~ "Stickleback",
+      sample_type = dplyr::case_when(
+        stringr::str_detect(Sample_ID, "LXXXX") ~ "Killifish",
+        stringr::str_detect(Sample_ID, "L\\d+") ~ "Stickleback",
         TRUE ~ "Unknown"
       )
     ) %>%
-    select(-L_number_raw, -L_digits)
+    dplyr::select(-L_number_raw, -L_digits)
   
   return(result)
 }
@@ -95,13 +95,13 @@ extract_paleo_ids <- function(data) {
 #' @return Data frame with LSPEC column added
 extract_order_ids <- function(data) {
   result <- data %>%
-    mutate(
+    dplyr::mutate(
       L_number = floor(as.numeric(`L..SPEC`)),
-      LSPEC = case_when(
-        !is.na(L_number) & L_number > 0 ~ paste0("L", str_pad(L_number, 4, pad = "0")),
+      LSPEC = dplyr::case_when(
+        !is.na(L_number) & L_number > 0 ~ paste0("L", stringr::str_pad(L_number, 4, pad = "0")),
         TRUE ~ NA_character_
       ),
-      has_decimal = str_detect(as.character(`L..SPEC`), "\\."),
+      has_decimal = stringr::str_detect(as.character(`L..SPEC`), "\\."),
       decimal_part = ifelse(has_decimal, 
                             as.numeric(`L..SPEC`) - floor(as.numeric(`L..SPEC`)), 
                             0)

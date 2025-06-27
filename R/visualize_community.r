@@ -36,8 +36,8 @@ visualize_community_trends <- function(metrics_data,
   
   # Prepare data for plotting
   plot_data <- metrics_data %>%
-    select(all_of(time_axis), richness, evenness, shannon_diversity) %>%
-    filter(!is.na(.data[[time_axis]]))
+    dplyr::select(dplyr::all_of(time_axis), richness, evenness, shannon_diversity) %>%
+    dplyr::filter(!is.na(.data[[time_axis]]))
   
   if (nrow(plot_data) == 0) {
     stop("No valid data for plotting")
@@ -65,18 +65,18 @@ create_combined_trends_plot <- function(plot_data, time_axis, smooth_method) {
   
   # Normalize metrics to 0-1 scale for comparable visualization
   plot_data_norm <- plot_data %>%
-    mutate(
+    dplyr::mutate(
       richness_norm = scale_to_01(richness),
       evenness_norm = scale_to_01(evenness),
       shannon_norm = scale_to_01(shannon_diversity)
     ) %>%
-    pivot_longer(
+    tidyr::pivot_longer(
       cols = c(richness_norm, evenness_norm, shannon_norm),
       names_to = "metric",
       values_to = "normalized_value"
     ) %>%
-    mutate(
-      metric = case_when(
+    dplyr::mutate(
+      metric = dplyr::case_when(
         metric == "richness_norm" ~ "Richness",
         metric == "evenness_norm" ~ "Evenness", 
         metric == "shannon_norm" ~ "Shannon Diversity"
@@ -84,31 +84,31 @@ create_combined_trends_plot <- function(plot_data, time_axis, smooth_method) {
     )
   
   # Create base plot
-  p <- ggplot(plot_data_norm, aes(x = .data[[time_axis]], y = normalized_value, color = metric)) +
-    geom_point(size = 2, alpha = 0.7) +
-    geom_line(alpha = 0.6) +
-    scale_color_manual(values = c("Richness" = "#2E8B57", "Evenness" = "#FF6347", "Shannon Diversity" = "#4169E1")) +
-    labs(
+  p <- ggplot2::ggplot(plot_data_norm, ggplot2::aes(x = .data[[time_axis]], y = normalized_value, color = metric)) +
+    ggplot2::geom_point(size = 2, alpha = 0.7) +
+    ggplot2::geom_line(alpha = 0.6) +
+    ggplot2::scale_color_manual(values = c("Richness" = "#2E8B57", "Evenness" = "#FF6347", "Shannon Diversity" = "#4169E1")) +
+    ggplot2::labs(
       title = "Community Metrics Trends Over Time",
       x = ifelse(time_axis == "CSTRAT", "Stratigraphic Depth (cm)", "Age (years)"),
       y = "Normalized Value (0-1 scale)",
       color = "Metric"
     ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
       legend.position = "bottom",
-      panel.grid.minor = element_blank()
+      panel.grid.minor = ggplot2::element_blank()
     )
   
   # Add smoothing if requested
   if (smooth_method != "none") {
-    p <- p + geom_smooth(method = smooth_method, se = TRUE, alpha = 0.2)
+    p <- p + ggplot2::geom_smooth(method = smooth_method, se = TRUE, alpha = 0.2)
   }
   
   # Reverse x-axis if using CSTRAT (deeper = older)
   if (time_axis == "CSTRAT") {
-    p <- p + scale_x_reverse()
+    p <- p + ggplot2::scale_x_reverse()
   }
   
   return(p)
@@ -124,13 +124,13 @@ create_faceted_trends_plot <- function(plot_data, time_axis, smooth_method) {
   
   # Prepare data for faceting
   plot_data_long <- plot_data %>%
-    pivot_longer(
+    tidyr::pivot_longer(
       cols = c(richness, evenness, shannon_diversity),
       names_to = "metric",
       values_to = "value"
     ) %>%
-    mutate(
-      metric = case_when(
+    dplyr::mutate(
+      metric = dplyr::case_when(
         metric == "richness" ~ "Richness",
         metric == "evenness" ~ "Evenness",
         metric == "shannon_diversity" ~ "Shannon Diversity"
@@ -139,30 +139,30 @@ create_faceted_trends_plot <- function(plot_data, time_axis, smooth_method) {
     )
   
   # Create faceted plot
-  p <- ggplot(plot_data_long, aes(x = .data[[time_axis]], y = value)) +
-    geom_point(size = 2, alpha = 0.7, color = "steelblue") +
-    geom_line(alpha = 0.6, color = "steelblue") +
-    facet_wrap(~ metric, scales = "free_y", ncol = 1) +
-    labs(
+  p <- ggplot2::ggplot(plot_data_long, ggplot2::aes(x = .data[[time_axis]], y = value)) +
+    ggplot2::geom_point(size = 2, alpha = 0.7, color = "steelblue") +
+    ggplot2::geom_line(alpha = 0.6, color = "steelblue") +
+    ggplot2::facet_wrap(~ metric, scales = "free_y", ncol = 1) +
+    ggplot2::labs(
       title = "Community Metrics Trends Over Time",
       x = ifelse(time_axis == "CSTRAT", "Stratigraphic Depth (cm)", "Age (years)"),
       y = "Metric Value"
     ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      strip.text = element_text(size = 12, face = "bold"),
-      panel.grid.minor = element_blank()
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      strip.text = ggplot2::element_text(size = 12, face = "bold"),
+      panel.grid.minor = ggplot2::element_blank()
     )
   
   # Add smoothing if requested
   if (smooth_method != "none") {
-    p <- p + geom_smooth(method = smooth_method, se = TRUE, alpha = 0.2, color = "darkblue")
+    p <- p + ggplot2::geom_smooth(method = smooth_method, se = TRUE, alpha = 0.2, color = "darkblue")
   }
   
   # Reverse x-axis if using CSTRAT (deeper = older)
   if (time_axis == "CSTRAT") {
-    p <- p + scale_x_reverse()
+    p <- p + ggplot2::scale_x_reverse()
   }
   
   return(p)
@@ -195,19 +195,19 @@ create_temporal_turnover_plot <- function(turnover_result) {
   # Calculate correlation
   correlation <- cor(temporal_trends$temporal_distance, temporal_trends$turnover, use = "complete.obs")
   
-  p <- ggplot(temporal_trends, aes(x = temporal_distance, y = turnover)) +
-    geom_point(alpha = 0.6, size = 2) +
-    geom_smooth(method = "lm", se = TRUE, color = "red") +
-    labs(
+  p <- ggplot2::ggplot(temporal_trends, ggplot2::aes(x = temporal_distance, y = turnover)) +
+    ggplot2::geom_point(alpha = 0.6, size = 2) +
+    ggplot2::geom_smooth(method = "lm", se = TRUE, color = "red") +
+    ggplot2::labs(
       title = "Temporal Distance vs Community Turnover",
       subtitle = paste("Correlation:", round(correlation, 3)),
       x = "Temporal Distance (years)",
       y = paste("Community Turnover (", turnover_result$method, ")", sep = "")
     ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      plot.subtitle = element_text(size = 12)
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      plot.subtitle = ggplot2::element_text(size = 12)
     )
   
   return(p)

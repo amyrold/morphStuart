@@ -27,23 +27,23 @@ flag_counterpart_conflicts <- function(data, threshold = 0.05) {
   analysis_vars <- c(var_map$continuous, var_map$count)
   
   part_data <- data %>% 
-    filter(part_type == "P") %>%
-    select(fish_id, part_type, row_id = n, Scale_10mm, all_of(analysis_vars))
+    dplyr::filter(part_type == "P") %>%
+    dplyr::select(fish_id, part_type, row_id = n, Scale_10mm, dplyr::all_of(analysis_vars))
   
   cpart_data <- data %>% 
-    filter(part_type == "C") %>%
-    select(fish_id, part_type, row_id = n, Scale_10mm, all_of(analysis_vars))
+    dplyr::filter(part_type == "C") %>%
+    dplyr::select(fish_id, part_type, row_id = n, Scale_10mm, dplyr::all_of(analysis_vars))
   
   # Aggregate part data
   part_agg <- part_data %>%
-    pivot_longer(
-      cols = all_of(analysis_vars),
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(analysis_vars),
       names_to = "measure",
       values_to = "value"
     ) %>%
-    filter(!is.na(value)) %>%
-    group_by(fish_id, measure) %>%
-    summarize(
+    dplyr::filter(!is.na(value)) %>%
+    dplyr::group_by(fish_id, measure) %>% 
+    dplyr::summarize(
       # Use max for count variables, mean for continuous
       part_value = if(first(measure) %in% var_map$count) max(value) else mean(value),
       part_scale = mean(Scale_10mm, na.rm = TRUE),
@@ -52,15 +52,15 @@ flag_counterpart_conflicts <- function(data, threshold = 0.05) {
     )
   
   # Aggregate counterpart data
-  cpart_agg <- cpart_data %>%
-    pivot_longer(
-      cols = all_of(analysis_vars),
+  cpart_agg <- cpart_data %>% 
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(analysis_vars),
       names_to = "measure", 
       values_to = "value"
-    ) %>%
-    filter(!is.na(value)) %>%
-    group_by(fish_id, measure) %>%
-    summarize(
+    ) %>% 
+    dplyr::filter(!is.na(value)) %>% 
+    dplyr::group_by(fish_id, measure) %>% 
+    dplyr::summarize(
       # Use max for count variables, mean for continuous
       cpart_value = if(first(measure) %in% var_map$count) max(value) else mean(value),
       cpart_scale = mean(Scale_10mm, na.rm = TRUE),
@@ -69,22 +69,22 @@ flag_counterpart_conflicts <- function(data, threshold = 0.05) {
     )
   
   # Find overlapping measurements and calculate differences
-  overlaps <- part_agg %>%
-    inner_join(cpart_agg, by = c("fish_id", "measure")) %>%
-    mutate(
-      var_type = case_when(
+  overlaps <- part_agg %>% 
+    dplyr::inner_join(cpart_agg, by = c("fish_id", "measure")) %>% 
+    dplyr::mutate(
+      var_type = dplyr::case_when(
         measure %in% var_map$continuous ~ "continuous",
         measure %in% var_map$count ~ "count",
         TRUE ~ "other"
       ),
       scale = coalesce((part_scale + cpart_scale) / 2, part_scale, cpart_scale),
       absolute_diff = abs(part_value - cpart_value),
-      relative_diff = case_when(
+      relative_diff = dplyr::case_when(
         var_type == "continuous" & scale > 0 ~ absolute_diff / scale,
         var_type == "count" ~ absolute_diff / max(1, pmax(part_value, cpart_value)),
         TRUE ~ as.numeric(absolute_diff > 0)
       ),
-      exceeds_threshold = case_when(
+      exceeds_threshold = dplyr::case_when(
         var_type == "continuous" ~ relative_diff > threshold,
         var_type == "count" ~ absolute_diff > 0,  # Any difference for counts
         TRUE ~ FALSE
@@ -93,18 +93,18 @@ flag_counterpart_conflicts <- function(data, threshold = 0.05) {
     )
   
   # Identify fish to flag
-  fish_to_flag <- overlaps %>%
-    filter(exceeds_threshold) %>%
-    select(fish_id) %>%
-    distinct() %>%
-    pull(fish_id)
+  fish_to_flag <- overlaps %>% 
+    dplyr::filter(exceeds_threshold) %>% 
+    dplyr::select(fish_id) %>% 
+    dplyr::distinct() %>% 
+    dplyr::pull(fish_id)
   
   # Split data
-  overlap_fish <- data %>%
-    filter(fish_id %in% fish_to_flag)
+  overlap_fish <- data %>% 
+    dplyr::filter(fish_id %in% fish_to_flag)
   
-  non_overlap_fish <- data %>%
-    filter(!fish_id %in% fish_to_flag)
+  non_overlap_fish <- data %>% 
+    dplyr::filter(!fish_id %in% fish_to_flag)
   
   # Save flagged fish for review
   if (!dir.exists("data/flagged")) {

@@ -38,25 +38,25 @@ merge_microscopy_counts <- function(paleo, microfossil_type = NULL) {
   
   if (length(metadata_cols) > 0) {
     sample_metadata <- paleo %>%
-      select(Sample_ID, all_of(metadata_cols)) %>%
-      distinct()
+      dplyr::select(Sample_ID, dplyr::all_of(metadata_cols)) %>%
+      dplyr::distinct()
   }
   
   # Merge counts by complete taxonomic identity
   merged_counts <- paleo %>%
-    filter(Microfossil_Type %in% types_to_process) %>%
-    group_by(Sample_ID, Microfossil_Type, Morphotype, Genus_Type, Species, Variety) %>%
-    summarise(
+    dplyr::filter(Microfossil_Type %in% types_to_process) %>%
+    dplyr::group_by(Sample_ID, Microfossil_Type, Morphotype, Genus_Type, Species, Variety) %>%
+    dplyr::summarise(
       Count = sum(Count, na.rm = TRUE),
       n_lines_merged = n(),
       .groups = "drop"
     ) %>%
-    filter(Count > 0)
+    dplyr::filter(Count > 0)
   
   # Add back metadata if available
   if (length(metadata_cols) > 0) {
     merged_counts <- merged_counts %>%
-      left_join(sample_metadata, by = "Sample_ID")
+      dplyr::left_join(sample_metadata, by = "Sample_ID")
   }
   
   return(merged_counts)

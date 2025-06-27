@@ -21,22 +21,22 @@ prepare_rioja_depth_data <- function(integrated_paleo_metadata) {
   
   # Get unique LSPEC with age/depth data
   depth_data <- integrated_paleo_metadata %>%
-    select(LSPEC, YEAR, CSTRAT) %>%
-    distinct() %>%
-    mutate(
+    dplyr::select(LSPEC, YEAR, CSTRAT) %>%
+    dplyr::distinct() %>%
+    dplyr::mutate(
       # Use YEAR as primary, CSTRAT as backup
       depth_value = coalesce(YEAR, CSTRAT)
     ) %>%
-    filter(!is.na(depth_value)) %>%
-    arrange(depth_value)
+    dplyr::filter(!is.na(depth_value)) %>%
+    dplyr::arrange(depth_value)
   
   # Check for duplicates
   if (anyDuplicated(depth_data$LSPEC)) {
     warning("Duplicate LSPECs found - using first occurrence")
     depth_data <- depth_data %>%
-      group_by(LSPEC) %>%
-      slice_head(n = 1) %>%
-      ungroup()
+      dplyr::group_by(LSPEC) %>%
+      dplyr::slice_head(n = 1) %>%
+      dplyr::ungroup()
   }
   
   # Create named vector

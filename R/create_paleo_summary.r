@@ -21,19 +21,19 @@ create_paleo_summary_table <- function(integrated_paleo_metadata) {
   
   # Create species labels (reuse logic from create_species_matrix.R)
   data_with_labels <- integrated_paleo_metadata %>%
-    mutate(
+    dplyr::mutate(
       species_label = create_species_label(Microfossil_Type, Morphotype, Genus_Type, Species, Variety)
     ) %>%
-    filter(!is.na(species_label), species_label != "", Count > 0)
+    dplyr::filter(!is.na(species_label), species_label != "", Count > 0)
   
   # Aggregate counts by LSPEC and species (in case of duplicates)
   aggregated_counts <- data_with_labels %>%
-    group_by(LSPEC, species_label) %>%
-    summarise(Count = sum(Count, na.rm = TRUE), .groups = "drop")
+    dplyr::group_by(LSPEC, species_label) %>%
+    dplyr::summarise(Count = sum(Count, na.rm = TRUE), .groups = "drop")
   
   # Create wide format with species as columns
   species_wide <- aggregated_counts %>%
-    pivot_wider(
+    tidyr::pivot_wider(
       names_from = species_label,
       values_from = Count,
       values_fill = 0
@@ -41,23 +41,23 @@ create_paleo_summary_table <- function(integrated_paleo_metadata) {
   
   # Get metadata for each LSPEC (take first record per LSPEC)
   lspec_metadata <- data_with_labels %>%
-    group_by(LSPEC) %>%
-    summarise(
-      YEAR = first(YEAR),
-      CSTRAT = first(CSTRAT),
-      ISTRAT = first(ISTRAT),
-      INT = first(INT),
-      Sample_ID = first(Sample_ID),
-      V_number = first(V_number),
+    dplyr::group_by(LSPEC) %>%
+    dplyr::summarise(
+      YEAR = dplyr::first(YEAR),
+      CSTRAT = dplyr::first(CSTRAT),
+      ISTRAT = dplyr::first(ISTRAT),
+      INT = dplyr::first(INT),
+      Sample_ID = dplyr::first(Sample_ID),
+      V_number = dplyr::first(V_number),
       total_count = sum(Count, na.rm = TRUE),
-      n_taxa = n_distinct(species_label),
+      n_taxa = dplyr::n_distinct(species_label),
       .groups = "drop"
     )
   
   # Merge metadata with species counts
   summary_table <- lspec_metadata %>%
-    left_join(species_wide, by = "LSPEC") %>%
-    arrange(YEAR, CSTRAT)
+    dplyr::left_join(species_wide, by = "LSPEC") %>%
+    dplyr::arrange(YEAR, CSTRAT)
   
   # Replace NA with 0 for count columns
   species_cols <- setdiff(names(summary_table), names(lspec_metadata))
@@ -95,8 +95,8 @@ create_species_label <- function(microfossil_type, morphotype, genus_type, speci
   )
   
   # Clean up multiple underscores and trailing underscores
-  species_label <- str_replace_all(species_label, "_+", "_")
-  species_label <- str_remove(species_label, "_$")
+  species_label <- stringr::str_replace_all(species_label, "_+", "_")
+  species_label <- stringr::str_remove(species_label, "_$")
   
   return(species_label)
 }

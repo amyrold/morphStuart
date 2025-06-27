@@ -16,7 +16,7 @@ create_species_matrix <- function(merged_counts, metadata_with_ages = NULL) {
   }
   
   data <- merged_counts %>%
-    mutate(
+    dplyr::mutate(
       species_label = paste(
         Microfossil_Type,
         ifelse(is.na(Morphotype) | Morphotype == "", "Unknown_Morphotype", Morphotype),
@@ -25,23 +25,23 @@ create_species_matrix <- function(merged_counts, metadata_with_ages = NULL) {
         ifelse(!is.na(Variety) & Variety != "", paste("var", Variety), ""),
         sep = "_"
       ),
-      species_label = str_replace_all(species_label, "_+", "_"),
-      species_label = str_remove(species_label, "_$")
+      species_label = stringr::str_replace_all(species_label, "_+", "_"),
+      species_label = stringr::str_remove(species_label, "_$")
     ) %>%
-    filter(!is.na(species_label), species_label != "", Count > 0)
+    dplyr::filter(!is.na(species_label), species_label != "", Count > 0)
   
   # Handle metadata - either from existing columns or extract from Sample_ID
   if (!is.null(metadata_with_ages)) {
     data <- data %>%
-      left_join(metadata_with_ages$data, by = "Sample_ID")
+      dplyr::left_join(metadata_with_ages$data, by = "Sample_ID")
   } else {
     # Check if metadata already exists in merged_counts, otherwise extract from Sample_ID
     if (!"sample_type" %in% names(data)) {
       data <- data %>%
-        mutate(
-          sample_type = case_when(
-            str_detect(Sample_ID, "LXXXX") ~ "Killifish",
-            str_detect(Sample_ID, "L\\d+") ~ "Stickleback", 
+        dplyr::mutate(
+          sample_type = dplyr::case_when(
+            stringr::str_detect(Sample_ID, "LXXXX") ~ "Killifish",
+            stringr::str_detect(Sample_ID, "L\\d+") ~ "Stickleback", 
             TRUE ~ "Unknown"
           )
         )
@@ -49,37 +49,37 @@ create_species_matrix <- function(merged_counts, metadata_with_ages = NULL) {
     
     if (!"LSPEC" %in% names(data)) {
       data <- data %>%
-        mutate(
-          LSPEC_raw = str_extract(Sample_ID, "L\\w+"),
-          L_digits = str_extract(Sample_ID, "(?<=L)\\d+"),
-          LSPEC = case_when(
-            !is.na(L_digits) ~ paste0("L", str_pad(L_digits, 4, pad = "0")),
-            str_detect(Sample_ID, "LXXXX") ~ "LXXXX",
+        dplyr::mutate(
+          LSPEC_raw = stringr::str_extract(Sample_ID, "L\\w+"),
+          L_digits = stringr::str_extract(Sample_ID, "(?<=L)\\d+"),
+          LSPEC = dplyr::case_when(
+            !is.na(L_digits) ~ paste0("L", stringr::str_pad(L_digits, 4, pad = "0")),
+            stringr::str_detect(Sample_ID, "LXXXX") ~ "LXXXX",
             TRUE ~ LSPEC_raw
           )
         ) %>%
-        select(-LSPEC_raw, -L_digits)
+        dplyr::select(-LSPEC_raw, -L_digits)
     }
     
     if (!"V_number" %in% names(data)) {
       data <- data %>%
-        mutate(V_number = str_extract(Sample_ID, "V\\d+"))
+        dplyr::mutate(V_number = stringr::str_extract(Sample_ID, "V\\d+"))
     }
     
     if (!all(c("CSTRAT", "YEAR") %in% names(data))) {
       data <- data %>%
-        mutate(CSTRAT = NA_real_, YEAR = NA_real_)
+        dplyr::mutate(CSTRAT = NA_real_, YEAR = NA_real_)
     }
   }
   
   stickleback <- process_species_group(
-    data %>% filter(sample_type == "Stickleback"), 
+    data %>% dplyr::filter(sample_type == "Stickleback"), 
     row_id = "LSPEC", 
     include_age = !is.null(metadata_with_ages)
   )
   
   killifish <- process_species_group(
-    data %>% filter(sample_type == "Killifish"), 
+    data %>% dplyr::filter(sample_type == "Killifish"), 
     row_id = "V_number", 
     include_age = FALSE
   )
@@ -102,12 +102,12 @@ create_species_matrix <- function(merged_counts, metadata_with_ages = NULL) {
     }),
     stringsAsFactors = FALSE
   ) %>%
-    mutate(
+    dplyr::mutate(
       Total = Stickleback_Total + Killifish_Total,
-      Microfossil_Type = str_extract(Species, "^[^_]+"),
-      Genus = str_extract(Species, "(?<=_)[^_]+(?=_)")
+      Microfossil_Type = stringr::str_extract(Species, "^[^_]+"),
+      Genus = stringr::str_extract(Species, "(?<=_)[^_]+(?=_)")
     ) %>%
-    arrange(desc(Total))
+    dplyr::arrange(dplyr::desc(Total))
   
   return(list(
     stickleback = stickleback,
@@ -123,30 +123,30 @@ create_species_matrix <- function(merged_counts, metadata_with_ages = NULL) {
 #' @param include_age Whether to include age/depth data
 process_species_group <- function(data, row_id, include_age) {
   wide_data <- data %>%
-    select(
-      all_of(row_id), Sample_ID, V_number, sample_type,
+    dplyr::select(
+      dplyr::all_of(row_id), Sample_ID, V_number, sample_type,
       if(include_age) c("CSTRAT", "YEAR") else character(),
       species_label, Count
     ) %>%
-    group_by(across(c(-species_label, -Count))) %>%
-    summarise(Count = sum(Count), .groups = "drop") %>%
-    pivot_wider(
+    dplyr::group_by(dplyr::across(c(-species_label, -Count))) %>%
+    dplyr::summarise(Count = sum(Count), .groups = "drop") %>%
+    tidyr::pivot_wider(
       names_from = species_label, 
       values_from = Count, 
       values_fill = 0
     )
   
   if(!include_age) {
-    wide_data <- wide_data %>% 
-      mutate(CSTRAT = NA_real_, YEAR = NA_real_)
+    wide_data <- wide_data %>%
+      dplyr::mutate(CSTRAT = NA_real_, YEAR = NA_real_)
   }
   
-  species_cols <- str_subset(colnames(wide_data), "^(Diatom|Phytolith|Charred)_")
-  counts <- wide_data %>% 
-    select(all_of(species_cols)) %>% 
+  species_cols <- stringr::str_subset(colnames(wide_data), "^(Diatom|Phytolith|Charred)_ ")
+  counts <- wide_data %>%
+    dplyr::select(dplyr::all_of(species_cols)) %>%
     as.data.frame()
-  samples <- wide_data %>% 
-    select(-all_of(species_cols))
+  samples <- wide_data %>%
+    dplyr::select(-dplyr::all_of(species_cols))
   
   rownames(counts) <- samples[[row_id]]
   
@@ -172,8 +172,8 @@ export_species_results <- function(results, prefix = "species_level", dir = ".")
     filename <- file.path(dir, paste0(prefix, "_", suffix, ".csv"))
     
     combined_data <- matrix_data$counts %>%
-      rownames_to_column(row_col) %>%
-      left_join(matrix_data$samples, by = setNames(row_col, names(matrix_data$samples)[1]))
+      tibble::rownames_to_column(row_col) %>%
+      dplyr::left_join(matrix_data$samples, by = setNames(row_col, names(matrix_data$samples)[1]))
     
     write.csv(combined_data, filename, row.names = FALSE)
     return(filename)

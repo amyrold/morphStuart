@@ -26,13 +26,13 @@ merge_paleo_with_fieldorder <- function(paleo_stickleback, fieldorder_complete) 
   
   # Prepare field order data for merging
   fieldorder_for_merge <- fieldorder_complete %>%
-    select(LSPEC, YEAR, CSTRAT, ISTRAT, INT) %>%
-    filter(!is.na(LSPEC))
+    dplyr::select(LSPEC, YEAR, CSTRAT, ISTRAT, INT) %>%
+    dplyr::filter(!is.na(LSPEC))
   
   # Merge datasets
   merged_data <- paleo_stickleback %>%
-    inner_join(fieldorder_for_merge, by = "LSPEC") %>%
-    filter(!is.na(YEAR) | !is.na(CSTRAT))  # Keep records with at least age or depth
+    dplyr::inner_join(fieldorder_for_merge, by = "LSPEC") %>%
+    dplyr::filter(!is.na(YEAR) | !is.na(CSTRAT))  # Keep records with at least age or depth
   
   # Quality checks
   original_samples <- length(unique(paleo_stickleback$Sample_ID))
@@ -40,13 +40,13 @@ merge_paleo_with_fieldorder <- function(paleo_stickleback, fieldorder_complete) 
   
   # Check for multiple field order records per LSPEC
   duplicate_check <- merged_data %>%
-    group_by(LSPEC) %>%
-    summarise(
+    dplyr::group_by(LSPEC) %>%
+    dplyr::summarise(
       n_year_values = length(unique(YEAR[!is.na(YEAR)])),
       n_cstrat_values = length(unique(CSTRAT[!is.na(CSTRAT)])),
       .groups = "drop"
     ) %>%
-    filter(n_year_values > 1 | n_cstrat_values > 1)
+    dplyr::filter(n_year_values > 1 | n_cstrat_values > 1)
   
   if (nrow(duplicate_check) > 0) {
     warning(paste("Found", nrow(duplicate_check), "LSPECs with multiple age/depth values"))
@@ -54,7 +54,7 @@ merge_paleo_with_fieldorder <- function(paleo_stickleback, fieldorder_complete) 
   
   # Sort by age (YEAR) for stratigraphic order
   merged_data <- merged_data %>%
-    arrange(YEAR, CSTRAT, LSPEC)
+    dplyr::arrange(YEAR, CSTRAT, LSPEC)
   
   # Report merge results
   cat("Paleo-Field Order Integration:\n")

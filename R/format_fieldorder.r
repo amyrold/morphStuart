@@ -18,7 +18,7 @@ format_fieldorder <- function(data) {
   
   # Format and standardize the data
   formatted <- data %>%
-    mutate(
+    dplyr::mutate(
       # Convert relevant columns to numeric with proper NA handling
       CSTRAT = suppressWarnings(as.numeric(CSTRAT)),
       ISTRAT = suppressWarnings(as.numeric(ISTRAT)), 
@@ -26,11 +26,11 @@ format_fieldorder <- function(data) {
       INT = suppressWarnings(as.numeric(INT))
     ) %>%
     # Select only the columns needed for analysis
-    select(L..SPEC, LSPEC, CSTRAT, ISTRAT, YEAR, INT) %>%
+    dplyr::select(L..SPEC, LSPEC, CSTRAT, ISTRAT, YEAR, INT) %>%
     # Rename original column for clarity
-    rename(L_SPEC_original = L..SPEC) %>%
+    dplyr::rename(L_SPEC_original = L..SPEC) %>%
     # Remove any rows where LSPEC couldn't be created
-    filter(!is.na(LSPEC), LSPEC != "LNA")
+    dplyr::filter(!is.na(LSPEC), LSPEC != "LNA")
   
   return(as.data.frame(formatted))
 }
@@ -48,7 +48,7 @@ format_fieldorder <- function(data) {
 get_fieldorder_quality_summary <- function(formatted_data) {
   summary <- list(
     total_records = nrow(formatted_data),
-    unique_lspecs = n_distinct(formatted_data$LSPEC),
+    unique_lspecs = dplyr::n_distinct(formatted_data$LSPEC),
     missing_cstrat = sum(is.na(formatted_data$CSTRAT)),
     missing_istrat = sum(is.na(formatted_data$ISTRAT)),
     missing_year = sum(is.na(formatted_data$YEAR)),

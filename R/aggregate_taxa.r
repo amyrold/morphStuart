@@ -129,8 +129,8 @@ apply_standard_aggregation <- function(data, level, metadata_cols, taxa_cols) {
   )
   
   # Clean up names
-  new_taxa_names <- str_replace_all(new_taxa_names, "_+", "_")
-  new_taxa_names <- str_remove(new_taxa_names, "_$")
+  new_taxa_names <- stringr::str_replace_all(new_taxa_names, "_+", "_")
+  new_taxa_names <- stringr::str_remove(new_taxa_names, "_$")
   
   # Aggregate taxa with same new names
   aggregate_by_new_names(data, taxa_cols, new_taxa_names, metadata_cols)
@@ -143,7 +143,7 @@ apply_standard_aggregation <- function(data, level, metadata_cols, taxa_cols) {
 parse_taxa_names <- function(taxa_cols) {
   
   # Split taxa names by underscore
-  taxa_split <- str_split(taxa_cols, "_", simplify = TRUE)
+  taxa_split <- stringr::str_split(taxa_cols, "_", simplify = TRUE)
   
   # Create data frame with taxonomic components
   taxa_parsed <- data.frame(
@@ -176,20 +176,20 @@ aggregate_by_new_names <- function(data, original_taxa_cols, new_taxa_names, met
   
   # Prepare data for aggregation
   data_long <- data %>%
-    select(all_of(c(metadata_cols, original_taxa_cols))) %>%
-    pivot_longer(
-      cols = all_of(original_taxa_cols),
+    dplyr::select(dplyr::all_of(c(metadata_cols, original_taxa_cols))) %>%
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(original_taxa_cols),
       names_to = "original_taxon",
       values_to = "count"
     ) %>%
-    left_join(taxa_mapping, by = c("original_taxon" = "original")) %>%
-    filter(count > 0) %>%
-    group_by(across(all_of(c(metadata_cols, "new_group")))) %>%
-    summarise(aggregated_count = sum(count, na.rm = TRUE), .groups = "drop")
+    dplyr::left_join(taxa_mapping, by = c("original_taxon" = "original")) %>%
+    dplyr::filter(count > 0) %>%
+    dplyr::group_by(dplyr::across(dplyr::all_of(c(metadata_cols, "new_group")))) %>%
+    dplyr::summarise(aggregated_count = sum(count, na.rm = TRUE), .groups = "drop")
   
   # Convert back to wide format
   result <- data_long %>%
-    pivot_wider(
+    tidyr::pivot_wider(
       names_from = new_group,
       values_from = aggregated_count,
       values_fill = 0
@@ -200,12 +200,12 @@ aggregate_by_new_names <- function(data, original_taxa_cols, new_taxa_names, met
   
   if ("total_count" %in% metadata_cols) {
     result <- result %>%
-      mutate(total_count = rowSums(select(., all_of(taxa_cols_new))))
+      dplyr::mutate(total_count = rowSums(dplyr::select(., dplyr::all_of(taxa_cols_new))))
   }
   
   if ("n_taxa" %in% metadata_cols) {
     result <- result %>%
-      mutate(n_taxa = rowSums(select(., all_of(taxa_cols_new)) > 0))
+      dplyr::mutate(n_taxa = rowSums(dplyr::select(., dplyr::all_of(taxa_cols_new)) > 0))
   }
   
   # Report aggregation results

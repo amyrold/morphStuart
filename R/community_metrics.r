@@ -43,28 +43,28 @@ calculate_community_metrics <- function(data,
   
   # Prepare community matrix (samples x species)
   community_matrix <- data %>%
-    select(LSPEC, all_of(time_column), all_of(taxa_cols)) %>%
-    arrange(.data[[time_column]])
+    dplyr::select(LSPEC, dplyr::all_of(time_column), dplyr::all_of(taxa_cols)) %>%
+    dplyr::arrange(.data[[time_column]])
   
   # Check if we need to pool samples by time_column
   time_counts <- community_matrix %>%
-    count(.data[[time_column]]) %>%
-    filter(n > 1)
+    dplyr::count(.data[[time_column]]) %>%
+    dplyr::filter(n > 1)
   
   if (nrow(time_counts) > 0) {
     # Pool samples with same time value
     cat("Pooling", sum(time_counts$n), "samples with duplicate", time_column, "values\n")
     community_matrix <- community_matrix %>%
-      group_by(.data[[time_column]]) %>%
-      summarise(
-        across(all_of(taxa_cols), sum, na.rm = TRUE),
+      dplyr::group_by(.data[[time_column]]) %>%
+      dplyr::summarise(
+        across(dplyr::all_of(taxa_cols), sum, na.rm = TRUE),
         .groups = "drop"
       )
   }
   
   # Create species matrix for vegan functions
   species_matrix <- community_matrix %>%
-    select(all_of(taxa_cols)) %>%
+    dplyr::select(dplyr::all_of(taxa_cols)) %>%
     as.matrix()
   
   rownames(species_matrix) <- community_matrix[[time_column]]
@@ -107,18 +107,18 @@ calculate_community_metrics <- function(data,
   
   if (length(other_time_cols) > 0) {
     time_data <- data %>%
-      select(all_of(c(time_column, other_time_cols))) %>%
-      distinct() %>%
-      group_by(.data[[time_column]]) %>%
-      summarise(across(everything(), first), .groups = "drop")
+      dplyr::select(dplyr::all_of(c(time_column, other_time_cols))) %>%
+      dplyr::distinct() %>%
+      dplyr::group_by(.data[[time_column]]) %>%
+      dplyr::summarise(dplyr::across(everything(), first), .groups = "drop")
     
     metrics_data <- metrics_data %>%
-      left_join(time_data, by = time_column)
+      dplyr::left_join(time_data, by = time_column)
   }
   
   # Sort by time order
   metrics_data <- metrics_data %>%
-    arrange(.data[[time_column]])
+    dplyr::arrange(.data[[time_column]])
   
   # Report results
   cat("Community Metrics Calculated:\n")
@@ -178,17 +178,17 @@ create_metrics_summary <- function(metrics_data) {
   numeric_data <- metrics_data[, numeric_cols, drop = FALSE]
   
   summary_stats <- numeric_data %>%
-    summarise_all(list(
+    dplyr::summarise_all(list(
       min = ~min(., na.rm = TRUE),
       max = ~max(., na.rm = TRUE),
       mean = ~mean(., na.rm = TRUE),
       median = ~median(., na.rm = TRUE),
       sd = ~sd(., na.rm = TRUE)
     )) %>%
-    pivot_longer(everything(), names_to = "metric_stat", values_to = "value") %>%
-    separate(metric_stat, into = c("metric", "statistic"), sep = "_(?=[^_]*$)") %>%
-    pivot_wider(names_from = statistic, values_from = value) %>%
-    mutate(across(where(is.numeric), ~round(., 3)))
+    tidyr::pivot_longer(everything(), names_to = "metric_stat", values_to = "value") %>%
+    tidyr::separate(metric_stat, into = c("metric", "statistic"), sep = "_(?=[^_]*$)") %>%
+    tidyr::pivot_wider(names_from = statistic, values_from = value) %>%
+    dplyr::mutate(dplyr::across(where(is.numeric), ~round(., 3)))
   
   return(summary_stats)
 }

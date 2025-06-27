@@ -17,8 +17,8 @@ flag_missing_scales <- function(morph) {
   }
   
   scale_summary <- morph %>%
-    group_by(fish_id) %>%
-    summarize(
+    dplyr::group_by(fish_id) %>%
+    dplyr::summarize(
       has_part_scale = any(!is.na(Scale_10mm[part_type == "P"])),
       has_cpart_scale = any(!is.na(Scale_10mm[part_type == "C"])),
       has_any_scale = has_part_scale | has_cpart_scale,
@@ -26,13 +26,13 @@ flag_missing_scales <- function(morph) {
     )
   
   fish_missing_scales <- scale_summary %>%
-    filter(!has_any_scale) %>%
-    pull(fish_id)
+    dplyr::filter(!has_any_scale) %>%
+    dplyr::pull(fish_id)
   
   missing_scales_detail <- morph %>%
-    filter(fish_id %in% fish_missing_scales) %>%
-    select(fish_id, ID, part_type, Scale_10mm) %>%
-    arrange(fish_id, part_type)
+    dplyr::filter(fish_id %in% fish_missing_scales) %>%
+    dplyr::select(fish_id, ID, part_type, Scale_10mm) %>%
+    dplyr::arrange(fish_id, part_type)
   
   if (!dir.exists("data/flagged")) {
     dir.create("data/flagged", recursive = TRUE)
@@ -92,22 +92,22 @@ handle_missing_scales <- function(morph, flagged_fish_ids, updated_scales_file =
     }
     
     morph_updated <- morph %>%
-      left_join(
-        updated_scales %>% select(ID, Scale_10mm_new = Scale_10mm), 
+      dplyr::left_join(
+        updated_scales %>% dplyr::select(ID, Scale_10mm_new = Scale_10mm), 
         by = "ID"
       ) %>%
-      mutate(
+      dplyr::mutate(
         Scale_10mm = coalesce(Scale_10mm_new, Scale_10mm)
       ) %>%
-      select(-Scale_10mm_new)
+      dplyr::select(-Scale_10mm_new)
     
     still_missing_fish <- flag_missing_scales(morph_updated)
     
     result <- morph_updated %>%
-      filter(!fish_id %in% still_missing_fish)
+      dplyr::filter(!fish_id %in% still_missing_fish)
     
     fish_still_missing <- morph_updated %>%
-      filter(fish_id %in% still_missing_fish)
+      dplyr::filter(fish_id %in% still_missing_fish)
     
     if (!dir.exists("data/processed")) {
       dir.create("data/processed", recursive = TRUE)
@@ -125,10 +125,10 @@ handle_missing_scales <- function(morph, flagged_fish_ids, updated_scales_file =
     
   } else {
     result <- morph %>%
-      filter(!fish_id %in% flagged_fish_ids)
+      dplyr::filter(!fish_id %in% flagged_fish_ids)
     
     fish_without_scales <- morph %>%
-      filter(fish_id %in% flagged_fish_ids)
+      dplyr::filter(fish_id %in% flagged_fish_ids)
     
     if (!dir.exists("data/processed")) {
       dir.create("data/processed", recursive = TRUE)

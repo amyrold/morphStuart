@@ -13,23 +13,23 @@
 #' @return ggplot object showing completeness by variable
 completeness_plot <- function(completeness_data) {
   if(nrow(completeness_data) == 0) {
-    return(ggplot() + 
-             geom_text(aes(x = 1, y = 1, label = "No completeness data available"), 
+    return(ggplot2::ggplot() + 
+             ggplot2::geom_text(ggplot2::aes(x = 1, y = 1, label = "No completeness data available"), 
                        size = 5) +
-             theme_void())
+             ggplot2::theme_void())
   }
   
-  ggplot(completeness_data, aes(x = reorder(Variable, Completeness), y = Completeness)) +
-    geom_col(fill = "steelblue", alpha = 0.8) +
-    coord_flip() +
-    labs(title = "Data Completeness by Variable", 
+  ggplot2::ggplot(completeness_data, ggplot2::aes(x = reorder(Variable, Completeness), y = Completeness)) +
+    ggplot2::geom_col(fill = "steelblue", alpha = 0.8) +
+    ggplot2::coord_flip() +
+    ggplot2::labs(title = "Data Completeness by Variable", 
          x = "Variable", 
          y = "Completeness (%)") +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      axis.text = element_text(size = 10),
-      axis.title = element_text(size = 12)
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      axis.text = ggplot2::element_text(size = 10),
+      axis.title = ggplot2::element_text(size = 12)
     )
 }
 
@@ -43,23 +43,23 @@ completeness_plot <- function(completeness_data) {
 #' @return ggplot object showing sample count by microfossil type
 microfossil_type_plot <- function(type_summary) {
   if(nrow(type_summary) == 0) {
-    return(ggplot() + 
-             geom_text(aes(x = 1, y = 1, label = "No microfossil data available"), 
+    return(ggplot2::ggplot() + 
+             ggplot2::geom_text(ggplot2::aes(x = 1, y = 1, label = "No microfossil data available"), 
                        size = 5) +
-             theme_void())
+             ggplot2::theme_void())
   }
   
-  ggplot(type_summary, aes(x = reorder(Microfossil_Type, Samples), y = Samples)) +
-    geom_col(fill = "lightgreen", alpha = 0.8, color = "darkgreen") +
-    coord_flip() +
-    labs(title = "Sample Count by Microfossil Type", 
+  ggplot2::ggplot(type_summary, ggplot2::aes(x = reorder(Microfossil_Type, Samples), y = Samples)) +
+    ggplot2::geom_col(fill = "lightgreen", alpha = 0.8, color = "darkgreen") +
+    ggplot2::coord_flip() +
+    ggplot2::labs(title = "Sample Count by Microfossil Type", 
          x = "Microfossil Type", 
          y = "Number of Samples") +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      axis.text = element_text(size = 10),
-      axis.title = element_text(size = 12)
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      axis.text = ggplot2::element_text(size = 10),
+      axis.title = ggplot2::element_text(size = 12)
     )
 }
 
@@ -73,26 +73,26 @@ microfossil_type_plot <- function(type_summary) {
 #' @return ggplot object showing completeness by field order column
 fieldorder_completeness_plot <- function(completeness_data) {
   if(nrow(completeness_data) == 0 || completeness_data$Column[1] == "Data not available") {
-    return(ggplot() + 
-             geom_text(aes(x = 1, y = 1, label = "Field order completeness data not available"), 
+    return(ggplot2::ggplot() + 
+             ggplot2::geom_text(ggplot2::aes(x = 1, y = 1, label = "Field order completeness data not available"), 
                        size = 5) +
-             theme_void())
+             ggplot2::theme_void())
   }
   
-  ggplot(completeness_data, aes(x = reorder(Column, Completeness), y = Completeness)) +
-    geom_col(fill = "steelblue", alpha = 0.7, color = "darkblue") +
-    geom_text(aes(label = paste0(round(Completeness, 1), "%")), 
+  ggplot2::ggplot(completeness_data, ggplot2::aes(x = reorder(Column, Completeness), y = Completeness)) +
+    ggplot2::geom_col(fill = "steelblue", alpha = 0.7, color = "darkblue") +
+    ggplot2::geom_text(ggplot2::aes(label = paste0(round(Completeness, 1), "%")), 
               hjust = -0.1, size = 3.5) +
-    coord_flip() +
-    labs(title = "Field Order Data Completeness by Column",
+    ggplot2::coord_flip() +
+    ggplot2::labs(title = "Field Order Data Completeness by Column",
          x = "Column", 
          y = "Completeness (%)") +
-    theme_minimal() +
-    ylim(0, 105) +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      axis.text = element_text(size = 10),
-      axis.title = element_text(size = 12)
+    ggplot2::theme_minimal() +
+    ggplot2::ylim(0, 105) +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      axis.text = ggplot2::element_text(size = 10),
+      axis.title = ggplot2::element_text(size = 12)
     )
 }
 
@@ -102,31 +102,31 @@ fieldorder_completeness_plot <- function(completeness_data) {
 #' @return ggplot object showing flagged records by category and priority
 flag_breakdown_plot <- function(fieldorder_flagged) {
   if(is.null(fieldorder_flagged) || nrow(fieldorder_flagged) == 0) {
-    return(ggplot() + 
-             geom_text(aes(x = 1, y = 1, label = "No records were flagged during processing"), 
+    return(ggplot2::ggplot() + 
+             ggplot2::geom_text(ggplot2::aes(x = 1, y = 1, label = "No records were flagged during processing"), 
                        size = 5) +
-             theme_void())
+             ggplot2::theme_void())
   }
   
   flag_viz_data <- fieldorder_flagged %>%
-    count(flag_category, review_priority) %>%
-    arrange(flag_category, factor(review_priority, levels = c("Critical", "High", "Medium", "Low", "Informational")))
+    dplyr::count(flag_category, review_priority) %>%
+    dplyr::arrange(flag_category, factor(review_priority, levels = c("Critical", "High", "Medium", "Low", "Informational")))
   
-  ggplot(flag_viz_data, aes(x = flag_category, y = n, fill = review_priority)) +
-    geom_col(position = "stack") +
-    scale_fill_manual(values = c("Critical" = "#d32f2f", "High" = "#f57c00", 
+  ggplot2::ggplot(flag_viz_data, ggplot2::aes(x = flag_category, y = n, fill = review_priority)) +
+    ggplot2::geom_col(position = "stack") +
+    ggplot2::scale_fill_manual(values = c("Critical" = "#d32f2f", "High" = "#f57c00", 
                                  "Medium" = "#fbc02d", "Low" = "#689f38", 
                                  "Informational" = "#1976d2")) +
-    labs(title = "Flagged Records by Category and Priority",
+    ggplot2::labs(title = "Flagged Records by Category and Priority",
          x = "Flag Category", 
          y = "Number of Records", 
          fill = "Priority") +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      axis.text = element_text(size = 10),
-      axis.title = element_text(size = 12)
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+      axis.text = ggplot2::element_text(size = 10),
+      axis.title = ggplot2::element_text(size = 12)
     )
 }
 
@@ -136,29 +136,29 @@ flag_breakdown_plot <- function(fieldorder_flagged) {
 #' @return ggplot object showing distribution of stratigraphic levels (CSTRAT)
 stratigraphic_distribution_plot <- function(fieldorder_clean) {
   if(is.null(fieldorder_clean) || nrow(fieldorder_clean) == 0) {
-    return(ggplot() + 
-             geom_text(aes(x = 1, y = 1, label = "Field order clean data not available"), 
+    return(ggplot2::ggplot() + 
+             ggplot2::geom_text(ggplot2::aes(x = 1, y = 1, label = "Field order clean data not available"), 
                        size = 5) +
-             theme_void())
+             ggplot2::theme_void())
   }
   
   if(sum(!is.na(fieldorder_clean$CSTRAT)) == 0) {
-    return(ggplot() + 
-             geom_text(aes(x = 1, y = 1, label = "No CSTRAT data available for visualization"), 
+    return(ggplot2::ggplot() + 
+             ggplot2::geom_text(ggplot2::aes(x = 1, y = 1, label = "No CSTRAT data available for visualization"), 
                        size = 5) +
-             theme_void())
+             ggplot2::theme_void())
   }
   
-  ggplot(fieldorder_clean %>% filter(!is.na(CSTRAT)), aes(x = CSTRAT)) +
-    geom_histogram(bins = 30, fill = "lightgreen", alpha = 0.7, color = "black") +
-    labs(title = "Distribution of Stratigraphic Levels (CSTRAT)",
+  ggplot2::ggplot(fieldorder_clean %>% dplyr::filter(!is.na(CSTRAT)), ggplot2::aes(x = CSTRAT)) +
+    ggplot2::geom_histogram(bins = 30, fill = "lightgreen", alpha = 0.7, color = "black") +
+    ggplot2::labs(title = "Distribution of Stratigraphic Levels (CSTRAT)",
          x = "CSTRAT (cm)", 
          y = "Number of Records") +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      axis.text = element_text(size = 10),
-      axis.title = element_text(size = 12)
+    ggplot2::theme_minimal() +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      axis.text = ggplot2::element_text(size = 10),
+      axis.title = ggplot2::element_text(size = 12)
     )
 }
 
@@ -168,30 +168,30 @@ stratigraphic_distribution_plot <- function(fieldorder_clean) {
 #' @return ggplot object showing distribution of ages (YEAR)
 age_distribution_plot <- function(fieldorder_clean) {
   if(is.null(fieldorder_clean) || nrow(fieldorder_clean) == 0) {
-    return(ggplot() + 
-             geom_text(aes(x = 1, y = 1, label = "Field order clean data not available"), 
+    return(ggplot2::ggplot() + 
+             ggplot2::geom_text(ggplot2::aes(x = 1, y = 1, label = "Field order clean data not available"), 
                        size = 5) +
-             theme_void())
+             ggplot2::theme_void())
   }
   
   if(sum(!is.na(fieldorder_clean$YEAR)) == 0) {
-    return(ggplot() + 
-             geom_text(aes(x = 1, y = 1, label = "No YEAR data available for visualization"), 
+    return(ggplot2::ggplot() + 
+             ggplot2::geom_text(ggplot2::aes(x = 1, y = 1, label = "No YEAR data available for visualization"), 
                        size = 5) +
-             theme_void())
+             ggplot2::theme_void())
   }
   
-  ggplot(fieldorder_clean %>% filter(!is.na(YEAR)), aes(x = YEAR)) +
-    geom_histogram(bins = 30, fill = "lightcoral", alpha = 0.7, color = "black") +
-    labs(title = "Distribution of Ages (YEAR)",
+  ggplot2::ggplot(fieldorder_clean %>% dplyr::filter(!is.na(YEAR)), ggplot2::aes(x = YEAR)) +
+    ggplot2::geom_histogram(bins = 30, fill = "lightcoral", alpha = 0.7, color = "black") +
+    ggplot2::labs(title = "Distribution of Ages (YEAR)",
          x = "Age (years)", 
          y = "Number of Records") +
-    theme_minimal() +
-    scale_x_continuous(labels = scales::comma) +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      axis.text = element_text(size = 10),
-      axis.title = element_text(size = 12)
+    ggplot2::theme_minimal() +
+    ggplot2::scale_x_continuous(labels = scales::comma) +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      axis.text = ggplot2::element_text(size = 10),
+      axis.title = ggplot2::element_text(size = 12)
     )
 }
 
@@ -201,38 +201,38 @@ age_distribution_plot <- function(fieldorder_clean) {
 #' @return ggplot object showing relationship between stratigraphic position and age
 age_depth_relationship_plot <- function(fieldorder_clean) {
   if(is.null(fieldorder_clean) || nrow(fieldorder_clean) == 0) {
-    return(ggplot() + 
-             geom_text(aes(x = 1, y = 1, label = "Field order clean data not available"), 
+    return(ggplot2::ggplot() + 
+             ggplot2::geom_text(ggplot2::aes(x = 1, y = 1, label = "Field order clean data not available"), 
                        size = 5) +
-             theme_void())
+             ggplot2::theme_void())
   }
   
   age_depth_data <- fieldorder_clean %>% 
-    filter(!is.na(CSTRAT) & !is.na(YEAR))
+    dplyr::filter(!is.na(CSTRAT) & !is.na(YEAR))
   
   if(nrow(age_depth_data) <= 5) {
-    return(ggplot() + 
-             geom_text(aes(x = 1, y = 1, label = "Insufficient paired age-depth data for correlation analysis"), 
+    return(ggplot2::ggplot() + 
+             ggplot2::geom_text(ggplot2::aes(x = 1, y = 1, label = "Insufficient paired age-depth data for correlation analysis"), 
                        size = 5) +
-             theme_void())
+             ggplot2::theme_void())
   }
   
   correlation <- cor(age_depth_data$CSTRAT, age_depth_data$YEAR, use = "complete.obs")
   
-  ggplot(age_depth_data, aes(x = CSTRAT, y = YEAR)) +
-    geom_point(alpha = 0.6, size = 2) +
-    geom_smooth(method = "lm", se = TRUE, color = "red", linewidth = 1) +
-    labs(title = "Relationship Between Stratigraphic Position and Age",
+  ggplot2::ggplot(age_depth_data, ggplot2::aes(x = CSTRAT, y = YEAR)) +
+    ggplot2::geom_point(alpha = 0.6, size = 2) +
+    ggplot2::geom_smooth(method = "lm", se = TRUE, color = "red", linewidth = 1) +
+    ggplot2::labs(title = "Relationship Between Stratigraphic Position and Age",
          subtitle = paste("Correlation:", round(correlation, 3)),
          x = "CSTRAT (cm)", 
          y = "Age (years)") +
-    theme_minimal() +
-    scale_y_continuous(labels = scales::comma) +
-    theme(
-      plot.title = element_text(size = 14, face = "bold"),
-      plot.subtitle = element_text(size = 12),
-      axis.text = element_text(size = 10),
-      axis.title = element_text(size = 12)
+    ggplot2::theme_minimal() +
+    ggplot2::scale_y_continuous(labels = scales::comma) +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, face = "bold"),
+      plot.subtitle = ggplot2::element_text(size = 12),
+      axis.text = ggplot2::element_text(size = 10),
+      axis.title = ggplot2::element_text(size = 12)
     )
 }
 
@@ -258,10 +258,10 @@ save_plot <- function(plot, filename, width = 10, height = 6, dpi = 300) {
   
   if (tolower(file_ext) == "svg") {
     # For SVG, don't use dpi parameter
-    ggsave(filename, plot, width = width, height = height, device = "svg")
+    ggplot2::ggsave(filename, plot, width = width, height = height, device = "svg")
   } else {
     # For other formats (PNG, PDF, etc.), include dpi
-    ggsave(filename, plot, width = width, height = height, dpi = dpi)
+    ggplot2::ggsave(filename, plot, width = width, height = height, dpi = dpi)
   }
   
   return(filename)

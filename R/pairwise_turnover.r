@@ -41,28 +41,28 @@ calculate_pairwise_turnover <- function(data, method = "bray", binary = FALSE, t
   
   # Prepare community matrix (time bins x species)
   community_matrix <- data %>%
-    select(all_of(time_column), all_of(taxa_cols)) %>%
-    arrange(.data[[time_column]])
+    dplyr::select(dplyr::all_of(time_column), dplyr::all_of(taxa_cols)) %>%
+    dplyr::arrange(.data[[time_column]])
   
   # Check if we need to pool samples by time_column
   time_counts <- community_matrix %>%
-    count(.data[[time_column]]) %>%
-    filter(n > 1)
+    dplyr::count(.data[[time_column]]) %>%
+    dplyr::filter(n > 1)
   
   if (nrow(time_counts) > 0) {
     # Pool samples with same time value
     cat("Pooling", sum(time_counts$n), "samples with duplicate", time_column, "values for turnover analysis\n")
     community_matrix <- community_matrix %>%
-      group_by(.data[[time_column]]) %>%
-      summarise(
-        across(all_of(taxa_cols), sum, na.rm = TRUE),
+      dplyr::group_by(.data[[time_column]]) %>%
+      dplyr::summarise(
+        across(dplyr::all_of(taxa_cols), sum, na.rm = TRUE),
         .groups = "drop"
       )
   }
   
   # Create species matrix for vegan functions
   species_matrix <- community_matrix %>%
-    select(all_of(taxa_cols)) %>%
+    dplyr::select(dplyr::all_of(taxa_cols)) %>%
     as.matrix()
   
   rownames(species_matrix) <- paste0(time_column, "_", community_matrix[[time_column]])
@@ -88,9 +88,9 @@ calculate_pairwise_turnover <- function(data, method = "bray", binary = FALSE, t
   other_time_cols <- intersect(c("YEAR", "CSTRAT"), names(data))
   if (length(other_time_cols) > 0) {
     time_info <- data %>%
-      select(all_of(c(time_column, other_time_cols))) %>%
-      distinct() %>%
-      arrange(.data[[time_column]])
+      dplyr::select(dplyr::all_of(c(time_column, other_time_cols))) %>%
+      dplyr::distinct() %>%
+      dplyr::arrange(.data[[time_column]])
   }
   
   # Create summary statistics

@@ -20,10 +20,10 @@ handle_fieldorder_missing_data <- function(duplicates_result) {
   
   # Add missing data indicators
   data_with_flags <- clean_data %>%
-    mutate(
-      missing_count = rowSums(is.na(select(., all_of(key_columns)))),
-      missing_columns = pmap_chr(
-        select(., all_of(key_columns)),
+    dplyr::mutate(
+      missing_count = rowSums(is.na(dplyr::select(., dplyr::all_of(key_columns)))),
+      missing_columns = purrr::pmap_chr(
+        dplyr::select(., dplyr::all_of(key_columns)),
         function(...) {
           values <- list(...)
           missing_cols <- key_columns[sapply(values, is.na)]
@@ -36,21 +36,21 @@ handle_fieldorder_missing_data <- function(duplicates_result) {
   
   # Separate complete from incomplete records
   complete_records <- data_with_flags %>%
-    filter(missing_count == 0) %>%
-    mutate(data_quality = "Complete") %>%
-    select(-missing_count, -missing_columns)  # Remove temporary columns
+    dplyr::filter(missing_count == 0) %>%
+    dplyr::mutate(data_quality = "Complete") %>%
+    dplyr::select(-missing_count, -missing_columns)  # Remove temporary columns
   
   incomplete_records <- data_with_flags %>%
-    filter(missing_count > 0) %>%
-    mutate(
-      data_quality = case_when(
+    dplyr::filter(missing_count > 0) %>%
+    dplyr::mutate(
+      data_quality = dplyr::case_when(
         missing_count >= 3 ~ "Poor - most data missing",
         missing_count == 2 ~ "Fair - half data missing",
         missing_count == 1 ~ "Good - minimal missing data"
       ),
       flag_reason = paste("Missing data in:", missing_columns),
       flag_category = "Missing data",
-      action_needed = case_when(
+      action_needed = dplyr::case_when(
         missing_count >= 3 ~ "Consider excluding from analysis",
         missing_count >= 2 ~ "Use with caution",
         TRUE ~ "Monitor for analysis limitations"

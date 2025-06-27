@@ -38,8 +38,8 @@ validate_lspec_links <- function(paleo_stickleback, fieldorder_complete) {
   flagged_missing <- NULL
   if (length(missing_from_fieldorder) > 0) {
     flagged_missing <- paleo_stickleback %>%
-      filter(LSPEC %in% missing_from_fieldorder) %>%
-      mutate(
+      dplyr::filter(LSPEC %in% missing_from_fieldorder) %>%
+      dplyr::mutate(
         flag_reason = "LSPEC missing from field order data",
         flag_category = "Missing stratigraphic data"
       )

@@ -25,10 +25,10 @@ merge_counter_parts <- function(data) {
   
   for (i in seq_along(fish_ids)) {
     id <- fish_ids[i]
-    fish_data <- data %>% filter(fish_id == id)
+    fish_data <- data %>% dplyr::filter(fish_id == id)
     
-    part_data <- fish_data %>% filter(part_type == "P")
-    cpart_data <- fish_data %>% filter(part_type == "C")
+    part_data <- fish_data %>% dplyr::filter(part_type == "P")
+    cpart_data <- fish_data %>% dplyr::filter(part_type == "C")
     
     result_row <- data.frame(fish_id = id)
     
@@ -90,7 +90,7 @@ merge_counter_parts <- function(data) {
     result_list[[i]] <- result_row
   }
   
-  result <- bind_rows(result_list)
+  result <- dplyr::bind_rows(result_list)
   
   for (col in names(data)) {
     if (!(col %in% names(result))) {

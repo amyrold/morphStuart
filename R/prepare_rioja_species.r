@@ -26,24 +26,24 @@ prepare_rioja_species_data <- function(integrated_paleo_metadata,
   
   # Create taxonomic labels based on grouping level
   data_with_labels <- integrated_paleo_metadata %>%
-    mutate(
+    dplyr::mutate(
       taxon_label = create_taxon_label(Microfossil_Type, Morphotype, Genus_Type, Species, Variety, grouping_level)
     ) %>%
-    filter(!is.na(taxon_label), taxon_label != "", Count > 0)
+    dplyr::filter(!is.na(taxon_label), taxon_label != "", Count > 0)
   
   # Aggregate counts by LSPEC and taxon label
   aggregated_data <- data_with_labels %>%
-    group_by(LSPEC, taxon_label) %>%
-    summarise(Count = sum(Count, na.rm = TRUE), .groups = "drop")
+    dplyr::group_by(LSPEC, taxon_label) %>%
+    dplyr::summarise(Count = sum(Count, na.rm = TRUE), .groups = "drop")
   
   # Create wide matrix for rioja
   species_matrix <- aggregated_data %>%
-    pivot_wider(
+    tidyr::pivot_wider(
       names_from = taxon_label,
       values_from = Count,
       values_fill = 0
     ) %>%
-    column_to_rownames("LSPEC") %>%
+    tibble::column_to_rownames("LSPEC") %>%
     as.matrix()
   
   # Report matrix characteristics
@@ -96,8 +96,8 @@ create_taxon_label <- function(microfossil_type, morphotype, genus_type, species
   )
   
   # Clean up multiple underscores and trailing underscores
-  taxon_label <- str_replace_all(taxon_label, "_+", "_")
-  taxon_label <- str_remove(taxon_label, "_$")
+  taxon_label <- stringr::str_replace_all(taxon_label, "_+", "_")
+  taxon_label <- stringr::str_remove(taxon_label, "_$")
   
   return(taxon_label)
 }

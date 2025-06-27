@@ -47,7 +47,7 @@ paleo_processing_summary <- function(paleo_raw, paleo_merged_counts) {
     Value = c(
       nrow(paleo_raw),
       nrow(paleo_merged_counts),
-      paste0(round((1 - nrow(paleo_merged_counts)/nrow(paleo_raw)) * 100, 1), "%")
+      paste0(round((1 - nrow(paleo_merged_counts)/nrow(paleo_raw)) * 100, 1), "%" )
     )
   )
 }
@@ -70,7 +70,7 @@ fieldorder_summary_table <- function(fieldorder_summary_data) {
       fieldorder_summary_data$record_counts$total_flagged_records,
       fieldorder_summary_data$record_counts$unique_lspecs_input,
       fieldorder_summary_data$record_counts$unique_lspecs_clean,
-      paste0(fieldorder_summary_data$record_counts$data_retention_rate, "%")
+      paste0(fieldorder_summary_data$record_counts$data_retention_rate, "%" )
     )
   )
 }
@@ -127,10 +127,10 @@ data_completeness_summary <- function(morph_final) {
   analysis_vars <- c(var_map$continuous, var_map$count)
   
   completeness <- morph_final %>%
-    select(all_of(analysis_vars)) %>%
-    summarise_all(~sum(!is.na(.)) / n() * 100) %>%
-    pivot_longer(everything(), names_to = "Variable", values_to = "Completeness") %>%
-    arrange(desc(Completeness))
+    dplyr::select(dplyr::all_of(analysis_vars)) %>%
+    dplyr::summarise_all(~sum(!is.na(.)) / n() * 100) %>%
+    tidyr::pivot_longer(everything(), names_to = "Variable", values_to = "Completeness") %>%
+    dplyr::arrange(dplyr::desc(Completeness))
   
   as.data.frame(completeness)
 }
@@ -145,8 +145,8 @@ data_completeness_summary <- function(morph_final) {
 #' @return Data frame with microfossil type statistics
 microfossil_type_summary <- function(paleo_merged_counts) {
   type_summary <- paleo_merged_counts %>%
-    count(Microfossil_Type, name = "Samples") %>%
-    arrange(desc(Samples))
+    dplyr::count(Microfossil_Type, name = "Samples") %>%
+    dplyr::arrange(dplyr::desc(Samples))
   
   as.data.frame(type_summary)
 }
@@ -161,8 +161,8 @@ sample_type_summary <- function(paleo_with_ids) {
   }
   
   sample_types <- paleo_with_ids %>%
-    distinct(Sample_ID, sample_type) %>%
-    count(sample_type)
+    dplyr::distinct(Sample_ID, sample_type) %>%
+    dplyr::count(sample_type)
   
   as.data.frame(sample_types)
 }

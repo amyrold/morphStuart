@@ -15,7 +15,7 @@ summarize_fieldorder_processing <- function(formatted_data, duplicates_result, f
   # Calculate completeness for final complete data
   if (nrow(final_result$complete) > 0) {
     completeness_pct <- final_result$complete %>%
-      summarise(
+      dplyr::summarise(
         across(c(CSTRAT, ISTRAT, YEAR, INT), ~100, .names = "pct_{.col}")
       )
   } else {
@@ -32,7 +32,7 @@ summarize_fieldorder_processing <- function(formatted_data, duplicates_result, f
     ),
     record_counts = list(
       input_records = nrow(formatted_data),
-      unique_input_lspecs = n_distinct(formatted_data$LSPEC),
+      unique_input_lspecs = dplyr::n_distinct(formatted_data$LSPEC),
       after_duplicate_processing = nrow(duplicates_result$clean),
       final_complete_records = nrow(final_result$complete),
       total_flagged_records = nrow(duplicates_result$flagged) + nrow(final_result$incomplete),

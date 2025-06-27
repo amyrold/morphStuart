@@ -20,9 +20,9 @@ process_fieldorder_duplicates <- function(formatted_data) {
   
   # Analyze duplicates and identify conflicts
   duplicate_analysis <- formatted_data %>%
-    group_by(LSPEC) %>%
-    filter(n() > 1) %>%
-    summarise(
+    dplyr::group_by(LSPEC) %>%
+    dplyr::filter(n() > 1) %>%
+    dplyr::summarise(
       n_records = n(),
       original_specs = paste(L_SPEC_original, collapse = ", "),
       # Check for actual conflicting values (not just missing)
@@ -32,36 +32,36 @@ process_fieldorder_duplicates <- function(formatted_data) {
       conflicting_INT = length(unique(INT[!is.na(INT)])) > 1,
       .groups = "drop"
     ) %>%
-    mutate(
+    dplyr::mutate(
       has_conflicts = conflicting_CSTRAT | conflicting_ISTRAT | 
         conflicting_YEAR | conflicting_INT,
       conflict_columns = paste(c(
-        if_else(conflicting_CSTRAT, "CSTRAT", ""),
-        if_else(conflicting_ISTRAT, "ISTRAT", ""),
-        if_else(conflicting_YEAR, "YEAR", ""),
-        if_else(conflicting_INT, "INT", "")
+        dplyr::if_else(conflicting_CSTRAT, "CSTRAT", ""),
+        dplyr::if_else(conflicting_ISTRAT, "ISTRAT", ""),
+        dplyr::if_else(conflicting_YEAR, "YEAR", ""),
+        dplyr::if_else(conflicting_INT, "INT", "")
       )[c(
-        if_else(conflicting_CSTRAT, "CSTRAT", ""),
-        if_else(conflicting_ISTRAT, "ISTRAT", ""),
-        if_else(conflicting_YEAR, "YEAR", ""),
-        if_else(conflicting_INT, "INT", "")
+        dplyr::if_else(conflicting_CSTRAT, "CSTRAT", ""),
+        dplyr::if_else(conflicting_ISTRAT, "ISTRAT", ""),
+        dplyr::if_else(conflicting_YEAR, "YEAR", ""),
+        dplyr::if_else(conflicting_INT, "INT", "")
       ) != ""], collapse = ", ")
     )
   
   # Get LSPECs with conflicts
   conflicting_lspecs <- duplicate_analysis %>%
-    filter(has_conflicts) %>%
-    pull(LSPEC)
+    dplyr::filter(has_conflicts) %>%
+    dplyr::pull(LSPEC)
   
   # Extract conflicting records for flagging
   flagged_records <- formatted_data %>%
-    filter(LSPEC %in% conflicting_lspecs) %>%
-    left_join(
+    dplyr::filter(LSPEC %in% conflicting_lspecs) %>%
+    dplyr::left_join(
       duplicate_analysis %>% 
-        select(LSPEC, conflict_columns, n_records),
+        dplyr::select(LSPEC, conflict_columns, n_records),
       by = "LSPEC"
     ) %>%
-    mutate(
+    dplyr::mutate(
       flag_reason = paste("Conflicting values in:", conflict_columns),
       flag_category = "Duplicate conflicts",
       action_needed = "Manual review and resolution required"
@@ -69,19 +69,19 @@ process_fieldorder_duplicates <- function(formatted_data) {
   
   # Process clean data: remove conflicts and merge non-conflicting duplicates
   clean_data <- formatted_data %>%
-    filter(!LSPEC %in% conflicting_lspecs) %>%
+    dplyr::filter(!LSPEC %in% conflicting_lspecs) %>%
     # For non-conflicting duplicates, merge by taking first non-NA value
-    group_by(LSPEC) %>%
-    summarise(
+    dplyr::group_by(LSPEC) %>%
+    dplyr::summarise(
       L_SPEC_original = paste(unique(L_SPEC_original), collapse = ", "),
-      CSTRAT = first(CSTRAT[!is.na(CSTRAT)]),
-      ISTRAT = first(ISTRAT[!is.na(ISTRAT)]),
-      YEAR = first(YEAR[!is.na(YEAR)]),
-      INT = first(INT[!is.na(INT)]),
+      CSTRAT = dplyr::first(CSTRAT[!is.na(CSTRAT)]),
+      ISTRAT = dplyr::first(ISTRAT[!is.na(ISTRAT)]),
+      YEAR = dplyr::first(YEAR[!is.na(YEAR)]),
+      INT = dplyr::first(INT[!is.na(INT)]),
       n_records_merged = n(),
       .groups = "drop"
     ) %>%
-    arrange(LSPEC)
+    dplyr::arrange(LSPEC)
   
   # Save flagged records if any exist
   if (nrow(flagged_records) > 0) {
