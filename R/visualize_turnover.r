@@ -159,7 +159,7 @@ create_turnover_dendrogram <- function(turnover_result, method = "complete") {
   hclust_result <- hclust(turnover_result$distance_matrix, method = method)
   
   # Convert to dendrogram data
-  dendro_data <- ggdendro::dendro_data(hclust_result)
+  dendro_data <- dendro_data(hclust_result)
   
   p <- ggplot2::ggplot() +
     ggplot2::geom_segment(data = dendro_data$segments, 
