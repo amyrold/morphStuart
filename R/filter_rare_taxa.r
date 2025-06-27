@@ -4,9 +4,9 @@
 #' This helps focus analysis on common taxa and reduces noise from rare
 #' occurrences that may be due to contamination or preservation artifacts.
 #'
-#' @param data Data frame with taxa columns and metadata
+#' @param data Data frame or matrix with taxa columns and (optionally) metadata
 #' @param threshold Numeric value between 0 and 1 representing minimum occurrence rate (default 0.10 = 10%)
-#' @return Data frame with rare taxa removed and updated summary statistics
+#' @return Data frame or matrix (matching input type) with rare taxa removed and updated summary statistics
 #'
 #' @examples
 #' # Remove taxa occurring in <10% of samples
@@ -15,29 +15,42 @@
 #' # Use stricter threshold (5%)
 #' filtered_strict <- filter_rare_taxa(aggregated_taxa, threshold = 0.05)
 filter_rare_taxa <- function(data, threshold = 0.10) {
-  if (!is.data.frame(data)) {
-    stop("Input must be a data frame")
-  }
   if (threshold < 0 || threshold > 1) {
     stop("Threshold must be between 0 and 1")
   }
   
+  is_matrix_input <- is.matrix(data)
+  
+  if (is_matrix_input) {
+    # Convert matrix to data frame for dplyr operations
+    data_df <- as.data.frame(data)
+    # Store row names (LSPEC) if they exist
+    if (!is.null(rownames(data))) {
+      data_df$LSPEC_rownames_temp <- rownames(data)
+    }
+  } else if (is.data.frame(data)) {
+    data_df <- data
+  } else {
+    stop("Input must be a data frame or a matrix")
+  }
+  
   # Define metadata columns to preserve
-  metadata_cols <- c("LSPEC", "YEAR", "CSTRAT", "ISTRAT", "INT", "Sample_ID", "V_number", "total_count", "n_taxa")
-  available_metadata <- intersect(metadata_cols, names(data))
+  # LSPEC_rownames_temp is a temporary column for matrix input row names
+  metadata_cols <- c("LSPEC", "YEAR", "CSTRAT", "ISTRAT", "INT", "Sample_ID", "V_number", "total_count", "n_taxa", "LSPEC_rownames_temp")
+  available_metadata <- intersect(metadata_cols, names(data_df))
   
   # Get taxa columns (everything that's not metadata)
-  taxa_cols <- setdiff(names(data), available_metadata)
+  taxa_cols <- setdiff(names(data_df), available_metadata)
   
   if (length(taxa_cols) == 0) {
     stop("No taxa columns found in data")
   }
   
-  n_samples <- nrow(data)
+  n_samples <- nrow(data_df)
   min_occurrences <- ceiling(n_samples * threshold)
   
   # Calculate occurrence rates for each taxon
-  occurrence_rates <- data %>%
+  occurrence_rates <- data_df %>%
     select(all_of(taxa_cols)) %>%
     summarise_all(~sum(. > 0)) %>%
     pivot_longer(everything(), names_to = "taxon", values_to = "occurrences") %>%
@@ -57,17 +70,17 @@ filter_rare_taxa <- function(data, threshold = 0.10) {
     pull(taxon)
   
   # Filter the data
-  filtered_data <- data %>%
+  filtered_data_df <- data_df %>%
     select(all_of(c(available_metadata, taxa_to_keep)))
   
   # Recalculate summary statistics if columns exist
   if ("total_count" %in% available_metadata && length(taxa_to_keep) > 0) {
-    filtered_data <- filtered_data %>%
+    filtered_data_df <- filtered_data_df %>%
       mutate(total_count = rowSums(select(., all_of(taxa_to_keep))))
   }
   
   if ("n_taxa" %in% available_metadata && length(taxa_to_keep) > 0) {
-    filtered_data <- filtered_data %>%
+    filtered_data_df <- filtered_data_df %>%
       mutate(n_taxa = rowSums(select(., all_of(taxa_to_keep)) > 0))
   }
   
@@ -97,7 +110,23 @@ filter_rare_taxa <- function(data, threshold = 0.10) {
   }
   cat("\n")
   
-  return(as.data.frame(filtered_data))
+  # Convert back to matrix if input was matrix
+  if (is_matrix_input) {
+    row_names <- NULL
+    if ("LSPEC_rownames_temp" %in% names(filtered_data_df)) {
+      row_names <- filtered_data_df$LSPEC_rownames_temp
+      filtered_data_df <- select(filtered_data_df, -LSPEC_rownames_temp)
+    }
+    # Ensure only numeric columns are converted to matrix
+    numeric_cols <- sapply(filtered_data_df, is.numeric)
+    filtered_matrix <- as.matrix(filtered_data_df[, numeric_cols, drop = FALSE])
+    if (!is.null(row_names)) {
+      rownames(filtered_matrix) <- row_names
+    }
+    return(filtered_matrix)
+  } else {
+    return(filtered_data_df)
+  }
 }
 
 #' Get Rare Taxa Filtering Summary

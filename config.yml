@@ -10,12 +10,13 @@ paths:
 
 analysis:
   conflict_threshold: 0.10
-  rioja_grouping_level: "morphotype"
+  rioja_grouping_level: "full_taxonomy"
   community_evenness_index: "pielou"
   time_column: "CSTRAT"
   turnover_method: "bray"
   rare_taxa_threshold: 0.10
   community_trends_plot_type: "faceted"
+  rioja_rare_taxa_threshold: 0.05
 
 plots:
   completeness_width: 10

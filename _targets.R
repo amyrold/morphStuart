@@ -198,6 +198,12 @@ list(
   ),
   
   tar_target(
+    name = rioja_filtered_species_matrix,
+    command = filter_rare_taxa(rioja_species_matrix, threshold = project_config$analysis$rioja_rare_taxa_threshold),
+    description = "Filtered species matrix for rioja plots, removing rare taxa below threshold"
+  ),
+  
+  tar_target(
     name = rioja_depth_data,
     command = prepare_rioja_depth_data(integrated_paleo_metadata),
     description = "Age/depth vector for rioja stratigraphic analysis (YEAR primary, CSTRAT backup)"
@@ -205,7 +211,7 @@ list(
   
   tar_target(
     name = rioja_strat_plots,
-    command = create_rioja_strat_plots(rioja_species_matrix, rioja_depth_data),
+    command = create_rioja_strat_plots(rioja_filtered_species_matrix, rioja_depth_data),
     description = "Rioja stratigraphic plots showing microfossil distributions through time"
   ),
   
@@ -278,7 +284,7 @@ list(
   
   tar_target(
     name = trends_plot,
-    command = visualize_community_trends(community_metrics, plot_type = project_config$analysis$community_trends_plot_type),
+    command = visualize_community_trends(community_metrics, plot_type = project_config$analysis$community_trends_plot_type, time_axis = project_config$analysis$time_column),
     description = "Time series visualization of community metrics"
   ),
   
