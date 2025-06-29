@@ -6,7 +6,7 @@ paths:
   output_dir: "results"
   plot_dir: "results/plots"
   report_dir: "results/report"
-  report_rmd: "results/report/report.Rmd"
+  report_rmd: "report.Rmd"
 
 analysis:
   conflict_threshold: 0.10

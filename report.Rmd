@@ -1,0 +1,998 @@
+---
+title: "Stickleback Morphology & Paleo-Ecology Data Processing Pipeline"
+author: "Analysis Report"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    code_folding: hide
+    fig_width: 10
+    fig_height: 6
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(targets)
+library(visNetwork)
+#source("_targets.R")
+
+# Load pipeline results with error handling
+tryCatch({
+  tar_load(c(
+    "morph_raw", "paleo_raw", 
+    "morph_with_ids", "paleo_with_ids",
+    "morph_with_scales", "morph_corrected", "morph_non_overlap", "morph_final",
+    "paleo_merged_counts",
+    "flagged_fish_missing_scales",
+    "report_completeness_data", "plot_completeness", "plot_microfossil_types",
+    "paleo_stickleback_only", "lspec_integration_check", "integrated_paleo_metadata",
+    "paleo_summary_table", "rioja_species_matrix", "rioja_depth_data", "rioja_strat_plots",
+    # Community ecology targets
+    "aggregated_taxa", "filtered_taxa", "community_metrics", "turnover_matrix", 
+    "trends_plot", "turnover_heatmap"
+  ))
+}, error = function(e) {
+  cat("Note: Some targets could not be loaded. Report may have missing sections.\n")
+  cat("Error details:", e$message, "\n")
+})
+```
+<div style="background-color: #f8f9fa; border: 2px solid #dee2e6; border-radius: 8px; padding: 20px; margin: 15px 0; max-width: 100%; overflow: hidden;">
+
+# Pipeline Overview
+
+This report documents the data processing pipeline for stickleback morphological measurements and paleo-ecological microfossil data. The pipeline transforms raw measurements into clean, analysis-ready datasets through systematic quality control and standardization steps.
+
+## Full Pipeline Architecture
+
+
+```{r pipeline-viz, fig.height=6, out.width="85%", fig.align="center"}
+if (requireNamespace("visNetwork", quietly = TRUE)) {
+  core_targets <- c(
+    "morph_raw", "paleo_raw", 
+    "morph_with_ids", "paleo_with_ids",
+    "morph_with_scales", "morph_corrected", "morph_non_overlap", "morph_final",
+    "paleo_merged_counts", "order_raw", "order_with_ids", "fieldorder_formatted",
+    "fieldorder_duplicates_processed", "fieldorder_final", 
+    "fieldorder_processing_summary",
+    "paleo_stickleback_only", "lspec_integration_check", "integrated_paleo_metadata",
+    "paleo_summary_table", "rioja_species_matrix", "rioja_depth_data", "rioja_strat_plots"
+    
+  )
+  
+  all_targets <- tar_meta()$name
+  targets_to_show <- intersect(core_targets, all_targets)
+  
+  tar_visnetwork(
+    targets_only = TRUE, 
+    names = targets_to_show,
+    label = c("time", "size")
+  ) %>%
+    visLegend(zoom = FALSE)
+} else {
+  cat("Pipeline network visualization requires the 'visNetwork' package.\n")
+}
+```
+
+
+# Morphology Cleaning Pipeline
+
+The morphology pipeline processes individual fish measurements from fossilized specimens, handling both "part" (P) and "counterpart" (C) sides of the same fossil. The goal is to create a single, high-quality measurement record for each fish.
+
+## Morphology Pipeline Flow
+
+```{r morph-pipeline-viz, fig.height=6}
+if (requireNamespace("visNetwork", quietly = TRUE)) {
+  morph_targets <- c(
+    "morph_raw", "morph_with_ids", "flagged_fish_missing_scales", 
+    "morph_with_scales", "morph_corrected", "morph_non_overlap", "morph_final"
+  )
+  
+  all_targets <- tar_meta()$name
+  morph_to_show <- intersect(morph_targets, all_targets)
+  
+  tar_visnetwork(
+    targets_only = TRUE, 
+    names = morph_to_show,
+    label = c("time", "size")
+  ) %>%
+    visLegend(zoom = FALSE)
+} else {
+  cat("Morphology pipeline visualization not available.\n")
+}
+```
+
+
+## Step 1: Splitting IDs
+
+The `extract_ids()` function parses complex specimen identifiers to extract key information for linking records across datasets.
+
+**Input ID Format**: `V330363_L2_1_C.jpg`  
+**Extracted Components**:
+- `fish_id`: V330363 (individual fish specimen)
+- `LSPEC`: L0002 (standardized geological specimen number)
+- `part_type`: C (counterpart vs P for part)
+
+```{r id-extraction}
+if(exists("morph_with_ids")) {
+  cat("Raw data structure:\n")
+  cat("Records:", nrow(morph_raw), "\n")
+  cat("Unique IDs:", length(unique(morph_raw$ID)), "\n\n")
+  
+  cat("After ID extraction:\n")
+  cat("Unique fish_id values:", length(unique(morph_with_ids$fish_id[!is.na(morph_with_ids$fish_id)])), "\n")
+  cat("Unique LSPEC values:", length(unique(morph_with_ids$LSPEC[!is.na(morph_with_ids$LSPEC)])), "\n")
+  
+  # Show example of ID parsing
+  sample_ids <- head(morph_with_ids[!is.na(morph_with_ids$fish_id), c("ID", "fish_id", "LSPEC", "part_type")], 5)
+  kable(sample_ids, caption = "Example ID Parsing Results")
+  
+  # Part/Counterpart distribution
+  part_dist <- table(morph_with_ids$part_type, useNA = "ifany")
+  cat("\nPart/Counterpart Distribution:\n")
+  print(part_dist)
+} else {
+  cat("ID extraction data not available.\n")
+}
+```
+
+## Step 2: Missing Scale Check
+
+Scale bars (10mm reference) are essential for measurement standardization. The pipeline either incorporates updated scale data or removes fish lacking scale information.
+
+```{r scale-handling}
+if(exists("flagged_fish_missing_scales") && exists("morph_with_scales")) {
+  cat("Scale Bar Quality Control:\n")
+  cat("Fish missing scales:", length(flagged_fish_missing_scales), "\n")
+  cat("Records before scale handling:", nrow(morph_with_ids), "\n")
+  cat("Records after scale handling:", nrow(morph_with_scales), "\n")
+  cat("Fish retained with scales:", length(unique(morph_with_scales$fish_id)), "\n\n")
+  
+  # Check if updated scales were incorporated
+  if(file.exists("data/raw/Results_missingscales.txt")) {
+    cat("Updated scale data was incorporated from colleague's measurements.\n")
+  } else {
+    cat("Fish without scale data were removed from analysis.\n")
+  }
+  
+  # Scale availability summary
+  scale_summary <- morph_with_scales %>%
+    group_by(fish_id) %>%
+    summarize(has_scale = any(!is.na(Scale_10mm)), .groups = "drop")
+  
+  cat("Fish with complete scale data:", sum(scale_summary$has_scale), "\n")
+} else {
+  cat("Scale handling data not available.\n")
+}
+```
+
+## Step 3: Handling Evolutionary Loss
+
+The `evolved_loss()` function applies biological logic to distinguish true evolutionary loss (coded as 0) from missing data due to poor preservation (coded as NA). This is critical for dorsal spine and pelvic girdle measurements.
+
+**Biological Logic Applied**:
+- If `MDS1 = 0` & `MDS1NA = 1`: Set `DS1` to `NA` (lost to preservation)
+- If `MDS1 = 0` & `MDS1NA = 0`: Set `DS1` to `0` (true evolutionary loss)
+
+```{r evolutionary-loss}
+if(exists("morph_with_scales") && exists("morph_corrected")) {
+  # Key columns affected by evolutionary loss logic
+  affected_cols <- c("DS1", "DS2", "DS3", "PSP.L", "PSP.R", "TPG")
+  available_cols <- intersect(affected_cols, names(morph_corrected))
+  
+  if(length(available_cols) > 0) {
+    cat("Evolutionary Loss Corrections Applied:\n\n")
+    
+    for(col in available_cols) {
+      if(col %in% names(morph_with_scales) && col %in% names(morph_corrected)) {
+        na_before <- sum(is.na(morph_with_scales[[col]]))
+        na_after <- sum(is.na(morph_corrected[[col]]))
+        zero_before <- sum(morph_with_scales[[col]] == 0, na.rm = TRUE)
+        zero_after <- sum(morph_corrected[[col]] == 0, na.rm = TRUE)
+        
+        cat(sprintf("%s: %d → %d NAs (%+d), %d → %d zeros (%+d)\n", 
+                   col, na_before, na_after, na_after - na_before,
+                   zero_before, zero_after, zero_after - zero_before))
+      }
+    }
+    
+    cat("\nThis transformation preserves true evolutionary loss while properly coding preservation artifacts.\n")
+  } else {
+    cat("Evolutionary loss columns not found in dataset.\n")
+  }
+} else {
+  cat("Evolutionary loss data not available.\n")
+}
+```
+
+## Step 4: Removing Fish with Conflicts
+
+Fish with conflicting measurements between part (P) and counterpart (C) sides are flagged and removed. The threshold for conflicts is set at 5% relative difference for continuous measurements.
+
+```{r conflict-removal}
+if(exists("morph_corrected") && exists("morph_non_overlap")) {
+  cat("Conflict Detection and Removal:\n")
+  cat("Records before conflict check:", nrow(morph_corrected), "\n")
+  cat("Fish before conflict check:", length(unique(morph_corrected$fish_id)), "\n")
+  cat("Records after conflict removal:", nrow(morph_non_overlap), "\n")
+  cat("Fish after conflict removal:", length(unique(morph_non_overlap$fish_id)), "\n\n")
+  
+  # Calculate fish removed
+  fish_before <- unique(morph_corrected$fish_id)
+  fish_after <- unique(morph_non_overlap$fish_id)
+  fish_removed <- setdiff(fish_before, fish_after)
+  
+  cat("Fish flagged for conflicts:", length(fish_removed), "\n")
+  cat("Conflict rate:", round(100 * length(fish_removed) / length(fish_before), 1), "%\n\n")
+  
+  # Show part/counterpart distribution in clean data
+  if("part_type" %in% names(morph_non_overlap)) {
+    part_dist_clean <- table(morph_non_overlap$part_type, useNA = "ifany")
+    cat("Part/Counterpart distribution in conflict-free data:\n")
+    print(part_dist_clean)
+  }
+  
+  cat("\nConflicting fish are saved to 'data/flagged/counterpart_conflicts.csv' for manual review.\n")
+} else {
+  cat("Conflict removal data not available.\n")
+}
+```
+
+## Step 5: Merging Parts and Counterparts
+
+For fish without conflicts, part and counterpart measurements are intelligently merged, prioritizing part (P) measurements over counterpart (C) when both are available.
+
+```{r merging-summary}
+if(exists("morph_non_overlap") && exists("morph_final")) {
+  cat("Part/Counterpart Merging Results:\n")
+  cat("Input records (P + C):", nrow(morph_non_overlap), "\n")
+  cat("Output records (merged):", nrow(morph_final), "\n")
+  cat("Final fish count:", length(unique(morph_final$fish_id)), "\n\n")
+  
+  # Check merge success
+  if("merged" %in% names(morph_final)) {
+    merge_success <- sum(morph_final$merged, na.rm = TRUE)
+    cat("Successfully merged records:", merge_success, "\n")
+  }
+  
+} else {
+  cat("Merging summary data not available.\n")
+}
+```
+
+## Final Morphology Dataset
+
+```{r final-completeness, fig.height=6}
+if(exists("plot_completeness")) {
+  print(plot_completeness)
+} else {
+  cat("Completeness plot not available.\n")
+}
+```
+
+---
+
+# Paleo-Ecology Cleaning Pipeline
+
+The paleo-ecology pipeline processes microscopy count data, where each row represents individual microscopy line counts that must be aggregated into geological sample totals.
+
+## Paleo Pipeline Flow
+
+```{r paleo-pipeline-viz, fig.height=4}
+if (requireNamespace("visNetwork", quietly = TRUE)) {
+  paleo_targets <- c("paleo_raw", "paleo_with_ids", "paleo_merged_counts")
+  
+  all_targets <- tar_meta()$name
+  paleo_to_show <- intersect(paleo_targets, all_targets)
+  
+  tar_visnetwork(
+    targets_only = TRUE, 
+    names = paleo_to_show,
+    label = c("time", "size")
+  ) %>%
+    visLegend(zoom = FALSE)
+} else {
+  cat("Paleo pipeline visualization not available.\n")
+}
+```
+
+## Step 1: Splitting IDs
+
+The `extract_ids()` function parses paleo sample identifiers to extract specimen information and classify sample types.
+
+**Input ID Format**: `V332333_L2072` or `V123456_LXXXX`  
+**Extracted Components**:
+- `V_number`: V332333 (individual geological sample)
+- `LSPEC`: L2072 (standardized specimen number)
+- `sample_type`: Stickleback or Killifish (based on LSPEC pattern)
+
+```{r paleo-id-extraction}
+if(exists("paleo_with_ids")) {
+  cat("Paleo ID Extraction Results:\n")
+  cat("Raw microscopy lines:", nrow(paleo_raw), "\n")
+  cat("Unique samples after ID extraction:", length(unique(paleo_with_ids$Sample_ID)), "\n")
+  cat("Unique V_numbers:", length(unique(paleo_with_ids$V_number[!is.na(paleo_with_ids$V_number)])), "\n")
+  cat("Unique LSPECs:", length(unique(paleo_with_ids$LSPEC[!is.na(paleo_with_ids$LSPEC)])), "\n\n")
+  
+  # Sample type distribution
+  if("sample_type" %in% names(paleo_with_ids)) {
+    sample_types <- table(paleo_with_ids$sample_type, useNA = "ifany")
+    cat("Sample Type Classification:\n")
+    print(sample_types)
+    cat("\n")
+  }
+  
+  # Show example ID parsing
+  sample_paleo <- head(paleo_with_ids[!is.na(paleo_with_ids$V_number), 
+                                     c("Sample_ID", "V_number", "LSPEC", "sample_type")], 5)
+  kable(sample_paleo, caption = "Example Paleo ID Parsing")
+} else {
+  cat("Paleo ID extraction data not available.\n")
+}
+```
+
+## Step 2: Merging Ecology Counts
+
+The `merge_microscopy_counts()` function aggregates 4-5 separate microscopy line counts per geological sample into final sample totals. Each unique taxonomic combination is preserved while counts are summed.
+
+**Merging Logic**:
+- Group by: Sample_ID + complete taxonomic identity (Microfossil_Type + Morphotype + Genus_Type + Species + Variety)
+- Aggregate: Sum all Count values for each unique combination
+- Result: One row per sample per unique taxon
+
+```{r count-merging}
+if(exists("paleo_merged_counts")) {
+  cat("Microscopy Count Merging Results:\n")
+  cat("Input microscopy lines:", nrow(paleo_raw), "\n")
+  cat("Output merged samples:", nrow(paleo_merged_counts), "\n")
+  cat("Data reduction:", round((1 - nrow(paleo_merged_counts)/nrow(paleo_raw)) * 100, 1), "%\n\n")
+  
+  # Show structure of merged data
+  cat("Merged Data Structure:\n")
+  str(paleo_merged_counts[, 1:8])  # Show first 8 columns
+  
+  # Count distribution by microfossil type
+  if("Microfossil_Type" %in% names(paleo_merged_counts)) {
+    type_dist <- paleo_merged_counts %>%
+      count(Microfossil_Type, name = "Samples") %>%
+      arrange(desc(Samples))
+    
+    cat("\nMicrofossil Type Distribution:\n")
+    kable(type_dist, caption = "Sample Counts by Microfossil Type")
+  }
+  
+  # Show merging efficiency
+  if("n_lines_merged" %in% names(paleo_merged_counts)) {
+    merge_stats <- summary(paleo_merged_counts$n_lines_merged)
+    cat("\nLines merged per sample (summary):\n")
+    print(merge_stats)
+  }
+} else {
+  cat("Count merging data not available.\n")
+}
+```
+
+## Microfossil Distribution
+
+```{r microfossil-plot, fig.height=6}
+if(exists("plot_microfossil_types")) {
+  print(plot_microfossil_types)
+} else {
+  cat("Microfossil type plot not available.\n")
+}
+```
+
+---
+
+# Field Order Cleaning Pipeline
+
+The field order pipeline processes stratigraphic and age data that links fish specimens to their geological context. This data contains specimen identifiers (LSPEC) that can be matched with morphology data, along with stratigraphic position (CSTRAT), interval data (ISTRAT), age (YEAR), and interval number (INT).
+
+## Field Order Pipeline Flow
+
+```{r fieldorder-pipeline-viz, fig.height=4}
+if (requireNamespace("visNetwork", quietly = TRUE)) {
+  fieldorder_targets <- c(
+    "order_raw", "order_with_ids", "fieldorder_formatted", 
+    "fieldorder_duplicates_processed", "fieldorder_final"
+  )
+  
+  all_targets <- tar_meta()$name
+  fieldorder_to_show <- intersect(fieldorder_targets, all_targets)
+  
+  tar_visnetwork(
+    targets_only = TRUE, 
+    names = fieldorder_to_show,
+    label = c("time", "size")
+  ) %>%
+    visLegend(zoom = FALSE)
+} else {
+  cat("Field order pipeline visualization not available.\n")
+}
+```
+
+```{r load-fieldorder-data, include=FALSE}
+# Load field order targets with error handling
+tryCatch({
+  tar_load(c(
+    "order_raw", "order_with_ids", "fieldorder_formatted",
+    "fieldorder_duplicates_processed", "fieldorder_final", 
+    "fieldorder_processing_summary"
+  ))
+}, error = function(e) {
+  cat("Note: Some field order targets could not be loaded.\n")
+})
+```
+
+## Step 1: ID Extraction and Formatting
+
+The field order data uses a different ID format (numeric values like "1", "123", "123.1") that must be converted to standardized LSPEC format for linking with other datasets.
+
+**Input ID Format**: `123` or `123.1`  
+**Standardized Output**: `L0123` (zero-padded to 4 digits)
+
+```{r fieldorder-formatting}
+if(exists("order_raw") && exists("fieldorder_formatted")) {
+  cat("Field Order Formatting Results:\n")
+  cat("Raw records:", nrow(order_raw), "\n")
+  cat("Formatted records:", nrow(fieldorder_formatted), "\n")
+  cat("Unique LSPECs created:", length(unique(fieldorder_formatted$LSPEC)), "\n\n")
+  
+  # Show example ID conversion
+  if(nrow(fieldorder_formatted) > 0) {
+    sample_conversion <- head(fieldorder_formatted[!is.na(fieldorder_formatted$LSPEC), 
+                                                 c("L_SPEC_original", "LSPEC")], 5)
+    kable(sample_conversion, caption = "Example ID Standardization")
+  }
+  
+  # Show data completeness after formatting
+  key_cols <- c("CSTRAT", "ISTRAT", "YEAR", "INT")
+  available_cols <- intersect(key_cols, names(fieldorder_formatted))
+  
+  if(length(available_cols) > 0) {
+    completeness <- fieldorder_formatted %>%
+      summarise_at(available_cols, ~round(100 * sum(!is.na(.)) / n(), 1))
+    
+    cat("\nData Completeness by Column:\n")
+    for(col in available_cols) {
+      cat(sprintf("%s: %s%%\n", col, completeness[[col]]))
+    }
+  }
+} else {
+  cat("Field order formatting data not available.\n")
+}
+```
+
+## Step 2: Duplicate LSPEC Processing
+
+Multiple records can have the same LSPEC identifier. The pipeline identifies which duplicates have conflicting data versus those that can be safely merged.
+
+```{r duplicate-processing}
+if(exists("fieldorder_duplicates_processed")) {
+  dup_result <- fieldorder_duplicates_processed
+  
+  cat("Duplicate LSPEC Analysis:\n")
+  cat("Input records:", dup_result$summary$total_input, "\n")
+  cat("Clean records after processing:", dup_result$summary$clean_output, "\n")
+  cat("Conflicting records flagged:", dup_result$summary$flagged_output, "\n")
+  cat("LSPECs with conflicts:", dup_result$summary$conflicting_lspecs, "\n\n")
+  
+  # Calculate duplicate statistics
+  input_lspecs <- length(unique(fieldorder_formatted$LSPEC))
+  clean_lspecs <- length(unique(dup_result$clean$LSPEC))
+  
+  cat("LSPEC Summary:\n")
+  cat("Unique LSPECs (input):", input_lspecs, "\n")
+  cat("Unique LSPECs (clean):", clean_lspecs, "\n")
+  cat("LSPECs removed due to conflicts:", input_lspecs - clean_lspecs, "\n")
+  cat("Conflict rate:", round(100 * dup_result$summary$conflicting_lspecs / input_lspecs, 1), "%\n\n")
+  
+  # Show merging efficiency for clean duplicates
+  if("n_records_merged" %in% names(dup_result$clean)) {
+    merged_records <- sum(dup_result$clean$n_records_merged > 1)
+    cat("LSPECs with multiple records merged:", merged_records, "\n")
+    
+    if(merged_records > 0) {
+      merge_summary <- dup_result$clean %>%
+        filter(n_records_merged > 1) %>%
+        pull(n_records_merged) %>%
+        summary()
+      
+      cat("Records merged per LSPEC (summary):\n")
+      print(merge_summary)
+    }
+  }
+  
+  cat("\nConflicting records saved to 'data/flagged/fieldorder_duplicate_conflicts.csv'\n")
+} else {
+  cat("Duplicate processing data not available.\n")
+}
+```
+
+## Step 3: Missing Data Handling
+
+Records are classified as complete or incomplete based on the availability of key stratigraphic and age data (CSTRAT, ISTRAT, YEAR, INT).
+
+```{r missing-data-handling}
+if(exists("fieldorder_final")) {
+  final_result <- fieldorder_final
+  
+  cat("Missing Data Analysis:\n")
+  cat("Input records (after duplicate processing):", final_result$summary$input_records, "\n")
+  cat("Complete records (all key data present):", final_result$summary$complete_records, "\n")
+  cat("Incomplete records (missing key data):", final_result$summary$incomplete_records, "\n")
+  cat("Data completion rate:", final_result$summary$completion_rate, "%\n\n")
+  
+  # Show breakdown of incomplete records if any exist
+  if(nrow(final_result$incomplete) > 0) {
+    cat("Incomplete Records Breakdown:\n")
+    
+    # Count by data quality category
+    if("data_quality" %in% names(final_result$incomplete)) {
+      quality_breakdown <- table(final_result$incomplete$data_quality)
+      print(quality_breakdown)
+      cat("\n")
+    }
+    
+    # Show missing data patterns
+    if("missing_columns" %in% names(final_result$incomplete)) {
+      missing_patterns <- final_result$incomplete %>%
+        count(missing_columns, name = "count") %>%
+        arrange(desc(count))
+      
+      cat("Missing Data Patterns:\n")
+      kable(head(missing_patterns, 5), caption = "Most Common Missing Data Patterns")
+    }
+    
+    cat("\nIncomplete records saved to 'data/flagged/fieldorder_missing_data.csv'\n")
+  } else {
+    cat("All records have complete key data!\n")
+  }
+} else {
+  cat("Missing data handling results not available.\n")
+}
+```
+
+## Stratigraphic and Age Distributions
+
+```{r fieldorder-distributions, fig.height=8}
+if(exists("fieldorder_final") && nrow(fieldorder_final$complete) > 0) {
+  
+  # Create distribution plots
+  p1 <- stratigraphic_distribution_plot(fieldorder_final$complete)
+  p2 <- age_distribution_plot(fieldorder_final$complete)
+  #p3 <- age_depth_relationship_plot(fieldorder_final$complete)
+  
+  # Arrange plots
+  if(requireNamespace("gridExtra", quietly = TRUE)) {
+    gridExtra::grid.arrange(p1, p2,ncol = 2) # p3,
+  } else {
+    print(p1)
+    print(p2)
+    #print(p3)
+  }
+} else {
+  cat("Field order distribution plots not available.\n")
+}
+```
+
+## Field Order Processing Summary
+
+```{r fieldorder-summary-table}
+if(exists("fieldorder_processing_summary")) {
+  summary_data <- fieldorder_processing_summary
+  
+  # Create summary table
+  processing_table <- data.frame(
+    Metric = c(
+      "Input Records", "Final Complete Records", "Data Retention Rate",
+      "Duplicate Conflicts", "Missing Data Records", "Clean LSPECs"
+    ),
+    Value = c(
+      summary_data$record_counts$input_records,
+      summary_data$record_counts$final_complete_records,
+      paste0(summary_data$record_counts$data_retention_rate, "%"),
+      summary_data$data_quality$duplicate_conflicts,
+      summary_data$data_quality$missing_data_records,
+      summary_data$record_counts$after_duplicate_processing
+    )
+  )
+  
+  kable(processing_table, caption = "Field Order Processing Summary")
+  
+  cat("\nProcessing Steps Completed:\n")
+  cat("1.", summary_data$processing_steps$step1_formatting, "\n")
+  cat("2.", summary_data$processing_steps$step2_duplicates, "\n") 
+  cat("3.", summary_data$processing_steps$step3_missing_data, "\n")
+} else {
+  cat("Field order processing summary not available.\n")
+}
+```
+
+---
+
+# Rioja Summary Table and Plots
+
+The rioja integration pipeline combines stickleback paleo-ecological data with stratigraphic information to create summary tables and stratigraphic plots for evolutionary analysis.
+
+## Rioja Pipeline Flow
+
+```{r rioja-pipeline-viz, fig.height=5}
+if (requireNamespace("visNetwork", quietly = TRUE)) {
+  rioja_targets <- c(
+    "paleo_stickleback_only", "lspec_integration_check", "integrated_paleo_metadata",
+    "paleo_summary_table", "rioja_species_matrix", "rioja_depth_data", "rioja_strat_plots"
+  )
+  
+  all_targets <- tar_meta()$name
+  rioja_to_show <- intersect(rioja_targets, all_targets)
+  
+  tar_visnetwork(
+    targets_only = TRUE, 
+    names = rioja_to_show,
+    label = c("time", "size")
+  ) %>%
+    visLegend(zoom = FALSE)
+} else {
+  cat("Rioja pipeline visualization not available.\n")
+}
+```
+
+## LSPEC Integration Results
+
+```{r lspec-integration-summary}
+if(exists("lspec_integration_check")) {
+  integration_summary <- lspec_integration_check$summary
+  
+  cat("LSPEC Integration Summary:\n")
+  cat("Paleo stickleback LSPECs:", integration_summary$paleo_lspecs_total, "\n")
+  cat("Field order LSPECs available:", integration_summary$fieldorder_lspecs_total, "\n")
+  cat("Successfully linked LSPECs:", integration_summary$linkable_lspecs, "\n")
+  cat("Missing from field order:", integration_summary$missing_from_fieldorder, "\n")
+  cat("Integration success rate:", integration_summary$linkage_rate, "%\n\n")
+  
+  if(integration_summary$missing_from_fieldorder > 0) {
+    cat("Missing LSPECs flagged and saved to 'data/flagged/paleo_lspecs_missing_fieldorder.csv'\n")
+  }
+} else {
+  cat("LSPEC integration data not available.\n")
+}
+```
+
+## Summary Table
+
+The summary table provides a wide-format view with LSPEC identifiers as rows and individual taxa as columns, preserving full taxonomic resolution for downstream analysis.
+
+```{r paleo-summary-table}
+if(exists("paleo_summary_table")) {
+  cat("Summary Table Dimensions:\n")
+  cat("LSPECs (rows):", nrow(paleo_summary_table), "\n")
+  cat("Total columns:", ncol(paleo_summary_table), "\n")
+  
+  # Count metadata vs taxa columns
+  metadata_cols <- c("LSPEC", "YEAR", "CSTRAT", "ISTRAT", "INT", "Sample_ID", "V_number", "total_count", "n_taxa")
+  available_metadata <- intersect(metadata_cols, names(paleo_summary_table))
+  taxa_cols <- setdiff(names(paleo_summary_table), available_metadata)
+  
+  cat("Metadata columns:", length(available_metadata), "\n")
+  cat("Taxa columns:", length(taxa_cols), "\n\n")
+  
+  # Show first few rows and columns
+  cat("Summary Table Preview (first 6 rows, first 10 columns):\n")
+  preview_data <- paleo_summary_table[1:min(6, nrow(paleo_summary_table)), 
+                                     1:min(10, ncol(paleo_summary_table))]
+  kable(preview_data, caption = "Paleo Summary Table Preview")
+  
+  # Show age range
+  if("YEAR" %in% names(paleo_summary_table)) {
+    age_range <- range(paleo_summary_table$YEAR, na.rm = TRUE)
+    cat("\nAge range:", age_range[1], "-", age_range[2], "years\n")
+  }
+  
+  # Show most abundant taxa
+  if(length(taxa_cols) > 0) {
+    taxa_totals <- colSums(paleo_summary_table[taxa_cols], na.rm = TRUE)
+    top_taxa <- head(sort(taxa_totals, decreasing = TRUE), 5)
+    
+    cat("\nTop 5 Most Abundant Taxa:\n")
+    for(i in seq_along(top_taxa)) {
+      cat(sprintf("%d. %s: %d specimens\n", i, names(top_taxa)[i], top_taxa[i]))
+    }
+  }
+} else {
+  cat("Paleo summary table not available.\n")
+}
+```
+
+## Stratigraphic Plot
+
+The rioja stratigraphic plot displays microfossil abundance patterns through geological time, enabling visualization of ecological changes and evolutionary trends.
+
+```{r rioja-matrix-summary}
+if(exists("rioja_species_matrix") && exists("rioja_depth_data")) {
+  cat("Rioja Matrix Characteristics:\n")
+  cat("Samples:", nrow(rioja_species_matrix), "\n")
+  cat("Taxa:", ncol(rioja_species_matrix), "\n")
+  cat("Total abundance:", sum(rioja_species_matrix), "\n")
+  cat("Matrix sparsity:", round(100 * sum(rioja_species_matrix == 0) / length(rioja_species_matrix), 1), "%\n")
+  cat("Age/depth range:", min(rioja_depth_data), "-", max(rioja_depth_data), "\n\n")
+} else {
+  cat("Rioja matrix data not available.\n")
+}
+```
+
+```{r rioja-stratigraphic-plot, fig.height=10, fig.width=12}
+if(exists("rioja_strat_plots")) {
+  # Display the rioja plot
+  if(!is.null(rioja_strat_plots$plot)) {
+    # Recreate the plot for display
+    rioja::strat.plot(
+      d = rioja_strat_plots$species_data,
+      yvar = rioja_strat_plots$depth_data,
+      title = "Microfossil Stratigraphic Distribution",
+      ylabel = "Age (years)",
+      srt.xlabel = 45,
+      mgp = c(3, 1, 0)
+    )
+  } else {
+    cat("Rioja stratigraphic plot not available.\n")
+  }
+  
+  # Display plot summary
+  if(!is.null(rioja_strat_plots$summary)) {
+    summary <- rioja_strat_plots$summary
+    cat("\nPlot Summary:\n")
+    cat("Samples plotted:", summary$n_samples, "\n")
+    cat("Taxa plotted:", summary$n_taxa, "\n")
+    cat("Taxa removed (zero counts):", summary$taxa_removed, "\n")
+    cat("Total specimens displayed:", summary$total_abundance, "\n")
+  }
+} else {
+  cat("Rioja stratigraphic plot not available. Run the rioja pipeline targets to generate plots.\n")
+}
+```
+
+# Community Ecology Analysis
+
+The community ecology pipeline applies modern community ecology metrics to the integrated paleo-ecological data, providing quantitative insights into how microfossil communities changed through geological time.
+
+## Community Ecology Pipeline Flow
+
+```{r community-pipeline-viz, fig.height=5}
+if (requireNamespace("visNetwork", quietly = TRUE)) {
+  community_targets <- c(
+    "aggregated_taxa", "filtered_taxa", "community_metrics", 
+    "turnover_matrix", "trends_plot", "turnover_heatmap"
+  )
+  
+  all_targets <- tar_meta()$name
+  community_to_show <- intersect(community_targets, all_targets)
+  
+  tar_visnetwork(
+    targets_only = TRUE, 
+    names = community_to_show,
+    label = c("time", "size")
+  ) %>%
+    visLegend(zoom = FALSE)
+} else {
+  cat("Community ecology pipeline visualization not available.\n")
+}
+```
+
+## Step 1: Taxa Aggregation and Filtering
+
+The pipeline aggregates taxa to the desired taxonomic resolution and filters out rare taxa to focus on common community members.
+
+```{r taxa-aggregation-summary}
+if(exists("aggregated_taxa") && exists("filtered_taxa")) {
+  cat("Taxa Aggregation and Filtering Results:\n")
+  
+  # Get taxa columns (excluding metadata)
+  metadata_cols <- c("LSPEC", "YEAR", "CSTRAT", "ISTRAT", "INT", "Sample_ID", "V_number", "total_count", "n_taxa")
+  available_metadata <- intersect(metadata_cols, names(aggregated_taxa))
+  
+  original_taxa <- setdiff(names(aggregated_taxa), available_metadata)
+  filtered_taxa_cols <- setdiff(names(filtered_taxa), available_metadata)
+  
+  cat("Original taxa count:", length(original_taxa), "\n")
+  cat("Filtered taxa count:", length(filtered_taxa_cols), "\n")
+  cat("Taxa retained:", round(100 * length(filtered_taxa_cols) / length(original_taxa), 1), "%\n")
+  cat("Samples analyzed:", nrow(filtered_taxa), "\n\n")
+  
+  if("total_count" %in% names(filtered_taxa)) {
+    cat("Total abundance range:", min(filtered_taxa$total_count), "-", max(filtered_taxa$total_count), "\n")
+  }
+  if("n_taxa" %in% names(filtered_taxa)) {
+    cat("Taxa richness range:", min(filtered_taxa$n_taxa), "-", max(filtered_taxa$n_taxa), "\n")
+  }
+} else {
+  cat("Taxa aggregation data not available.\n")
+}
+```
+
+## Step 2: Community Metrics Calculation
+
+Using the vegan package, we calculate standard community ecology metrics for each age (time bin).
+
+```{r community-metrics-summary}
+if(exists("community_metrics")) {
+  cat("Community Metrics Summary:\n")
+  cat("Time bins analyzed:", nrow(community_metrics), "\n")
+  
+  if("YEAR" %in% names(community_metrics)) {
+    cat("Temporal range:", min(community_metrics$YEAR), "-", max(community_metrics$YEAR), "years\n")
+  }
+  if("CSTRAT" %in% names(community_metrics)) {
+    cat("Stratigraphic range:", min(community_metrics$CSTRAT), "-", max(community_metrics$CSTRAT), "cm\n")
+  }
+  
+  # Create summary table
+  metrics_summary <- community_metrics %>%
+    select(where(is.numeric), -CSTRAT, -YEAR) %>%
+    summarise_all(list(
+      Min = ~min(., na.rm = TRUE),
+      Max = ~max(., na.rm = TRUE), 
+      Mean = ~mean(., na.rm = TRUE),
+      Median = ~median(., na.rm = TRUE)
+    )) %>%
+    pivot_longer(everything(), names_to = "Metric_Stat", values_to = "Value") %>%
+    separate(Metric_Stat, into = c("Metric", "Statistic"), sep = "_(?=[^_]*$)") %>%
+    pivot_wider(names_from = Statistic, values_from = Value) %>%
+    mutate(across(where(is.numeric), ~round(., 3)))
+  
+  kable(metrics_summary, caption = "Community Metrics Summary Statistics")
+} else {
+  cat("Community metrics data not available.\n")
+}
+```
+
+## Step 3: Pairwise Turnover Analysis
+
+Beta diversity between all pairs of time bins reveals patterns of community compositional change.
+
+```{r turnover-summary}
+if(exists("turnover_matrix")) {
+  cat("Pairwise Turnover Analysis:\n")
+  cat("Method:", turnover_matrix$method, "\n")
+  cat("Time bins:", turnover_matrix$summary$n_time_bins, "\n")
+  cat("Pairwise comparisons:", turnover_matrix$summary$n_comparisons, "\n")
+  cat("Turnover range:", round(turnover_matrix$summary$min_turnover, 3), "-", 
+      round(turnover_matrix$summary$max_turnover, 3), "\n")
+  cat("Mean turnover:", round(turnover_matrix$summary$mean_turnover, 3), "\n")
+  cat("Standard deviation:", round(turnover_matrix$summary$sd_turnover, 3), "\n\n")
+  
+  cat("Most dissimilar time bins:", paste(turnover_matrix$summary$most_dissimilar_pair, collapse = " vs "), "\n")
+  cat("Most similar time bins:", paste(turnover_matrix$summary$most_similar_pair, collapse = " vs "), "\n")
+} else {
+  cat("Turnover analysis data not available.\n")
+}
+```
+
+## Community Trends Through Time
+
+The following plot shows how species richness, evenness, and Shannon diversity change through geological time.
+
+```{r community-trends-plot, fig.height=12, fig.width=10}
+if(exists("trends_plot")) {
+  print(trends_plot)
+} else {
+  cat("Community trends plot not available.\n")
+}
+```
+
+## Pairwise Community Turnover
+
+This heatmap displays the beta diversity (compositional dissimilarity) between all pairs of time bins. Higher values indicate greater differences in community composition.
+
+```{r turnover-heatmap-plot, fig.height=8, fig.width=10}
+if(exists("turnover_heatmap")) {
+  print(turnover_heatmap)
+} else {
+  cat("Turnover heatmap not available.\n")
+}
+```
+
+## Community Ecology Interpretation
+
+```{r community-interpretation}
+if(exists("community_metrics") && exists("turnover_matrix")) {
+  # Calculate some interpretive statistics
+  richness_trend <- if("YEAR" %in% names(community_metrics)) {
+    cor(community_metrics$YEAR, community_metrics$richness, use = "complete.obs")
+  } else {
+    cor(community_metrics$CSTRAT, community_metrics$richness, use = "complete.obs")
+  }
+  
+  evenness_trend <- if("YEAR" %in% names(community_metrics)) {
+    cor(community_metrics$YEAR, community_metrics$evenness, use = "complete.obs")
+  } else {
+    cor(community_metrics$CSTRAT, community_metrics$evenness, use = "complete.obs")
+  }
+  
+  cat("Community Ecology Patterns:\n\n")
+  
+  cat("**Richness Trend**: ")
+  if(abs(richness_trend) > 0.5) {
+    direction <- ifelse(richness_trend > 0, "increases", "decreases")
+    cat("Species richness", direction, "significantly through time (r =", round(richness_trend, 3), ")\n\n")
+  } else {
+    cat("Species richness shows no strong temporal trend (r =", round(richness_trend, 3), ")\n\n")
+  }
+  
+  cat("**Evenness Trend**: ")
+  if(abs(evenness_trend) > 0.5) {
+    direction <- ifelse(evenness_trend > 0, "increases", "decreases")
+    cat("Community evenness", direction, "significantly through time (r =", round(evenness_trend, 3), ")\n\n")
+  } else {
+    cat("Community evenness shows no strong temporal trend (r =", round(evenness_trend, 3), ")\n\n")
+  }
+  
+  cat("**Community Turnover**: ")
+  mean_turnover <- turnover_matrix$summary$mean_turnover
+  if(mean_turnover > 0.7) {
+    cat("High community turnover (mean =", round(mean_turnover, 3), ") indicates substantial compositional changes between time periods.\n\n")
+  } else if(mean_turnover > 0.4) {
+    cat("Moderate community turnover (mean =", round(mean_turnover, 3), ") suggests gradual compositional changes through time.\n\n")
+  } else {
+    cat("Low community turnover (mean =", round(mean_turnover, 3), ") indicates relatively stable community composition through time.\n\n")
+  }
+  
+  cat("These patterns provide quantitative support for interpreting paleoenvironmental changes and evolutionary processes affecting the microfossil communities.\n")
+} else {
+  cat("Community ecology interpretation requires both metrics and turnover data.\n")
+}
+```
+
+---
+
+# Pipeline Summary
+
+## Data Transformation Overview
+
+```{r transformation-summary}
+if(exists("morph_raw") && exists("morph_final") && exists("paleo_raw") && exists("paleo_merged_counts")) {
+  summary_data <- data.frame(
+    Dataset = c("Morphology", "Paleo-Ecology"),
+    Input_Records = c(nrow(morph_raw), nrow(paleo_raw)),
+    Output_Records = c(nrow(morph_final), nrow(paleo_merged_counts)),
+    Input_Units = c(length(unique(morph_raw$ID)), length(unique(paleo_raw$Sample_ID))),
+    Output_Units = c(length(unique(morph_final$fish_id)), length(unique(paleo_merged_counts$Sample_ID))),
+    Data_Reduction = c(
+      paste0(round((1 - nrow(morph_final)/nrow(morph_raw)) * 100, 1), "%"),
+      paste0(round((1 - nrow(paleo_merged_counts)/nrow(paleo_raw)) * 100, 1), "%")
+    )
+  )
+  
+  kable(summary_data, caption = "Pipeline Transformation Summary")
+} else {
+  cat("Summary data not available.\n")
+}
+```
+
+## Key Quality Control Actions
+
+**Morphology Pipeline**:
+- Standardized specimen IDs and extracted fish/geological identifiers
+- Resolved missing scale bar issues through colleague collaboration
+- Applied biological logic to distinguish evolutionary loss from preservation artifacts  
+- Flagged and removed fish with conflicting part/counterpart measurements
+- Merged clean part/counterpart data prioritizing higher-quality measurements
+
+**Paleo-Ecology Pipeline**:
+- Extracted and standardized sample identifiers and classifications
+- Aggregated individual microscopy line counts into geological sample totals
+- Preserved complete taxonomic resolution while reducing data volume
+
+Both datasets are now ready for integrated evolutionary analysis using LSPEC identifiers to link fish morphology with their paleo-environmental context.
+
+</div>
+---
+
+*Report generated on `r Sys.Date()` using targets pipeline*
