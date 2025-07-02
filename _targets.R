@@ -135,6 +135,18 @@ list(
   # ========================================================================= #
   
   tar_target(
+    name = decimal_lspecs_review,
+    command = validate_decimal_lspecs(order_raw),
+    description = "Identify all field order records with decimal LSPEC values for colleague review"
+  ),
+  
+  tar_target(
+    name = missing_morph_lspecs_review,
+    command = validate_missing_morph_lspecs(morph_with_ids, fieldorder_final$complete),
+    description = "Identify morph LSPECs missing from field order data"
+  ),
+  
+  tar_target(
     name = fieldorder_formatted,
     command = format_fieldorder(order_with_ids),
     description = "Format and standardize field order data with LSPEC IDs"

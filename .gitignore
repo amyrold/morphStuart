@@ -53,6 +53,7 @@ data/archive
 data/intermediate
 data/flagged
 data/processed
+data/review
 
 # Result files
 results/
