@@ -6,7 +6,7 @@
 #' @param data Data frame with taxa columns and CSTRAT/YEAR metadata
 #' @param evenness_index Character string specifying evenness index: "pielou", "simpson", "custom"
 #' @param diversity_indices Vector of diversity indices to calculate (default: c("shannon", "simpson"))
-#' @return Data frame with community metrics by time bin
+#' @return Data frame with community metrics by time bin, preserving LSPEC
 #'
 #' @examples
 #' metrics <- calculate_community_metrics(filtered_data)
@@ -41,25 +41,18 @@ calculate_community_metrics <- function(data,
     warning(paste("Requested time column not found, using", time_column))
   }
   
-  # Prepare community matrix (samples x species)
+  # Prepare community matrix (samples x species) - no pooling needed since 1:1 relationship
   community_matrix <- data %>%
     dplyr::select(LSPEC, dplyr::all_of(time_column), dplyr::all_of(taxa_cols)) %>%
     dplyr::arrange(.data[[time_column]])
   
-  # Check if we need to pool samples by time_column
-  time_counts <- community_matrix %>%
+  # Verify 1:1 relationship between LSPEC and time_column
+  duplicate_check <- community_matrix %>%
     dplyr::count(.data[[time_column]]) %>%
     dplyr::filter(n > 1)
   
-  if (nrow(time_counts) > 0) {
-    # Pool samples with same time value
-    cat("Pooling", sum(time_counts$n), "samples with duplicate", time_column, "values\n")
-    community_matrix <- community_matrix %>%
-      dplyr::group_by(.data[[time_column]]) %>%
-      dplyr::summarise(
-        across(dplyr::all_of(taxa_cols), sum, na.rm = TRUE),
-        .groups = "drop"
-      )
+  if (nrow(duplicate_check) > 0) {
+    stop(paste("Found", nrow(duplicate_check), "time values with multiple samples. Expected 1:1 relationship."))
   }
   
   # Create species matrix for vegan functions
@@ -67,7 +60,8 @@ calculate_community_metrics <- function(data,
     dplyr::select(dplyr::all_of(taxa_cols)) %>%
     as.matrix()
   
-  rownames(species_matrix) <- community_matrix[[time_column]]
+  # Use LSPEC as row names for vegan functions
+  rownames(species_matrix) <- community_matrix$LSPEC
   
   # Calculate basic richness
   richness <- vegan::specnumber(species_matrix)
@@ -84,8 +78,9 @@ calculate_community_metrics <- function(data,
   # Calculate total abundance per sample
   total_abundance <- rowSums(species_matrix)
   
-  # Combine results
+  # Combine results - preserve LSPEC and time information
   metrics_data <- data.frame(
+    LSPEC = community_matrix$LSPEC,
     time_value = community_matrix[[time_column]],
     richness = richness,
     evenness = evenness,
@@ -94,26 +89,23 @@ calculate_community_metrics <- function(data,
   )
   
   # Set proper column name for time
-  names(metrics_data)[1] <- time_column
+  names(metrics_data)[2] <- time_column
   
   # Add diversity indices
   for (div_name in names(diversity_results)) {
     metrics_data[[div_name]] <- diversity_results[[div_name]]
   }
   
-  # Add other temporal information if available and different from time_column
-  other_time_cols <- intersect(c("YEAR", "CSTRAT"), names(data))
-  other_time_cols <- setdiff(other_time_cols, time_column)
-  
-  if (length(other_time_cols) > 0) {
-    time_data <- data %>%
-      dplyr::select(dplyr::all_of(c(time_column, other_time_cols))) %>%
-      dplyr::distinct() %>%
-      dplyr::group_by(.data[[time_column]]) %>%
-      dplyr::summarise(dplyr::across(everything(), first), .groups = "drop")
+  # Add other metadata columns if available (CSTRAT when using YEAR, or YEAR when using CSTRAT)
+  # Only add if they have 1:1 relationship with time_column
+  other_metadata <- setdiff(available_metadata, c("LSPEC", time_column))
+  if (length(other_metadata) > 0) {
+    metadata_to_add <- data %>%
+      dplyr::select(LSPEC, dplyr::all_of(other_metadata)) %>%
+      dplyr::distinct()
     
     metrics_data <- metrics_data %>%
-      dplyr::left_join(time_data, by = time_column)
+      dplyr::left_join(metadata_to_add, by = "LSPEC")
   }
   
   # Sort by time order
@@ -122,7 +114,7 @@ calculate_community_metrics <- function(data,
   
   # Report results
   cat("Community Metrics Calculated:\n")
-  cat("Time bins (CSTRAT levels):", nrow(metrics_data), "\n")
+  cat("Samples analyzed:", nrow(metrics_data), "\n")
   cat("Richness range:", round(min(richness), 1), "-", round(max(richness), 1), "\n")
   cat("Evenness range:", round(min(evenness, na.rm = TRUE), 3), "-", round(max(evenness, na.rm = TRUE), 3), "\n")
   cat("Shannon diversity range:", round(min(diversity_results$shannon_diversity, na.rm = TRUE), 3), 

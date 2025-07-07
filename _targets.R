@@ -21,7 +21,7 @@ library(tarchetypes)
 
 tar_option_set(
   packages = c("dplyr", "tidyr", "stringr", "tibble", "purrr", "ggplot2", "scales",
-               "vegan", "rioja", "readr", "knitr", "DT", "yaml"),
+               "vegan", "rioja", "readr", "knitr", "DT", "yaml", "visNetwork"),
   format = "rds",
   error = "continue"
 )
@@ -335,7 +335,7 @@ list(
 
   tar_target(
     name = recorder_bias_analysis,
-    command = analyze_recorder_bias(community_metrics, recorder_mapping, paleo_summary_table),
+    command = analyze_recorder_bias(community_metrics, recorder_mapping),
     description = "ANOVA analysis of community metrics by recorder to detect measurement bias"
   ),
 

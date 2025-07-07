@@ -51,54 +51,27 @@ extract_recorder_mapping <- function(paleo_with_ids) {
 #' metrics between different data recorders. Creates boxplots showing the
 #' distribution of each metric by recorder, with CSTRAT depth color coding.
 #'
-#' @param community_metrics Output from calculate_community_metrics()
+#' @param community_metrics Output from calculate_community_metrics() (includes LSPEC and CSTRAT)
 #' @param recorder_mapping Output from extract_recorder_mapping()
-#' @param paleo_summary_table Summary table with LSPEC and depth information
 #' @return List containing ANOVA results, boxplots, and merged data
 #'
 #' @examples
-#' bias_analysis <- analyze_recorder_bias(community_metrics, recorder_mapping, paleo_summary_table)
-analyze_recorder_bias <- function(community_metrics, recorder_mapping, paleo_summary_table) {
-  if (!is.data.frame(community_metrics) || !is.data.frame(recorder_mapping) || !is.data.frame(paleo_summary_table)) {
-    stop("All inputs must be data frames")
+#' bias_analysis <- analyze_recorder_bias(community_metrics, recorder_mapping)
+analyze_recorder_bias <- function(community_metrics, recorder_mapping) {
+  if (!is.data.frame(community_metrics) || !is.data.frame(recorder_mapping)) {
+    stop("community_metrics and recorder_mapping must be data frames")
   }
   
-  # Determine which time column is being used in community_metrics
-  time_column <- if("YEAR" %in% names(community_metrics)) "YEAR" else "CSTRAT"
-  
-  if (!time_column %in% names(paleo_summary_table)) {
-    stop(paste("Time column", time_column, "not found in paleo_summary_table"))
+  # Verify that community_metrics includes required columns
+  if (!"LSPEC" %in% names(community_metrics)) {
+    stop("community_metrics must contain 'LSPEC' column")
+  }
+  if (!"CSTRAT" %in% names(community_metrics)) {
+    stop("community_metrics must contain 'CSTRAT' column")
   }
   
-  # Create mapping from time values to LSPEC using paleo_summary_table
-  # Ensure we always have CSTRAT even if time_column is YEAR
-  time_to_lspec <- paleo_summary_table %>%
-    dplyr::select(LSPEC, dplyr::all_of(time_column), CSTRAT) %>%
-    dplyr::filter(!is.na(.data[[time_column]])) %>%
-    dplyr::distinct()
-  
-  # Check if we have the required data
-  if (nrow(time_to_lspec) == 0) {
-    stop("No valid time-to-LSPEC mappings found in paleo_summary_table")
-  }
-  
-  # Link community metrics to LSPEC via time column
-  metrics_with_lspec <- community_metrics %>%
-    dplyr::left_join(time_to_lspec, by = time_column, suffix = c("", "_summary"))
-  
-  # Check if CSTRAT column exists after join
-  if (!"CSTRAT" %in% names(metrics_with_lspec)) {
-    # If time_column is YEAR, we need to ensure CSTRAT comes through
-    if (time_column == "YEAR" && "CSTRAT_summary" %in% names(metrics_with_lspec)) {
-      metrics_with_lspec <- metrics_with_lspec %>%
-        dplyr::rename(CSTRAT = CSTRAT_summary)
-    } else {
-      stop("CSTRAT column not found after joining with paleo_summary_table")
-    }
-  }
-  
-  # Link to recorder information
-  metrics_with_recorder <- metrics_with_lspec %>%
+  # Direct join since community_metrics now preserves LSPEC
+  metrics_with_recorder <- community_metrics %>%
     dplyr::left_join(recorder_mapping, by = "LSPEC") %>%
     dplyr::filter(!is.na(Recorder))
   
@@ -178,8 +151,7 @@ analyze_recorder_bias <- function(community_metrics, recorder_mapping, paleo_sum
         ggplot2::labs(
           title = title_text,
           x = "Recorder",
-          y = metric_display,
-          color = "CSTRAT"
+          y = metric_display
         ) +
         ggplot2::theme_minimal() +
         ggplot2::theme(
@@ -209,6 +181,18 @@ analyze_recorder_bias <- function(community_metrics, recorder_mapping, paleo_sum
     }),
     stringsAsFactors = FALSE
   )
+  
+  # Report simplified joining process
+  cat("Recorder Bias Analysis:\n")
+  cat("Direct join via LSPEC - no intermediate mapping needed\n")
+  cat("Community metrics with recorder data:", nrow(metrics_with_recorder), "samples\n")
+  cat("Recorders in analysis:", length(unique(metrics_with_recorder$Recorder)), "\n")
+  if (!all(is.na(plot_data$CSTRAT))) {
+    cat("CSTRAT depth data available for color coding\n")
+  } else {
+    cat("No CSTRAT depth data available\n")
+  }
+  cat("\n")
   
   return(list(
     anova_results = anova_results,
