@@ -28,3 +28,5 @@ plots:
   turnover_heatmap_width: 10
   turnover_heatmap_height: 8
   turnover_color_palette: "viridis"
+  recorder_bias_width: 10
+  recorder_bias_height: 6
