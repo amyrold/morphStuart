@@ -1,4 +1,15 @@
 preprocessing <- list(
+  # ========================================================================= #
+  # CONFIGURATION TRACKER ----
+  # ========================================================================= #
+  # This target exists solely to track changes in config.yml
+  # It does not produce a value that is used by other targets.
+  tar_target(
+    name = config_file_tracker,
+    command = "config.yml",
+    format = "file",
+    description = "Tracks changes in the project configuration file"
+  ),
 
   # ========================================================================= #
   # DATA IMPORT ----
