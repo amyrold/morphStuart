@@ -1,6 +1,6 @@
-morph <- list(
+morph_processing <- list(
   # ========================================================================= #
-  # MORPHOLOGY PROCESSING PIPELINE ----
+  # MORPH PROCESSING PIPELINE ----
   # ========================================================================= #
   
   tar_target(

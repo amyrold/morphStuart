@@ -48,17 +48,20 @@ list(
   
   preprocessing,  
   
-  morph,
+  morph_processing,
   
-  paleo,
+  paleo_processing,
   
-  fieldorder,
+  fieldorder_processing,
+
+  fieldorder_integration,
   
   stratigraphy,
-  
-  report_generation,
 
   community_ecology,
 
-  recorder_bias
+  recorder_bias,
+
+  report_generation
+
   )
