@@ -5,13 +5,13 @@ stratigraphy <- list(
   
   tar_target(
     name = paleo_summary_table,
-    command = create_paleo_summary_table(integrated_paleo_metadata),
+    command = create_paleo_summary_table(paleo_with_depths),
     description = "Wide-format table with LSPEC rows and individual taxa columns"
   ),
   
   tar_target(
     name = rioja_species_matrix,
-    command = prepare_rioja_species_data(integrated_paleo_metadata, grouping_level = project_config$analysis$rioja_grouping_level),
+    command = prepare_rioja_species_data(paleo_with_depths, grouping_level = project_config$analysis$rioja_grouping_level),
     description = "Species matrix for rioja stratigraphic plots (full taxonomic resolution)"
   ),
   
@@ -23,7 +23,7 @@ stratigraphy <- list(
   
   tar_target(
     name = rioja_depth_data,
-    command = prepare_rioja_depth_data(integrated_paleo_metadata),
+    command = prepare_rioja_depth_data(paleo_with_depths),
     description = "Age/depth vector for rioja stratigraphic analysis (YEAR primary, CSTRAT backup)"
   ),
   
