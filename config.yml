@@ -3,6 +3,7 @@ paths:
   raw_paleo: "data/raw/060625_paleoeco_seriesL.csv"
   raw_order: "data/raw/PitLMorph_fieldorder.csv"
   raw_missing_scales: "data/raw/Results_missingscales.txt"
+  unassigned_functional_group: "data/review/unassigned_functional_group.csv"
   output_dir: "results"
   plot_dir: "results/plots"
   report_dir: "results/report"
@@ -30,3 +31,76 @@ plots:
   turnover_color_palette: "viridis"
   recorder_bias_width: 10
   recorder_bias_height: 6
+
+# Functional groupings for paleo-ecological analysis
+functional_groupings:
+  # Microfossils to exclude from analysis
+  exclude_taxa:
+    - microfossil_type: "Granules"
+      patterns: ["*.*.*.*"]  # All Granules regardless of other taxonomy
+  
+  # Functional group definitions
+  groups:
+    "Woody dicotyledons":
+      microfossil_type: "Phytolith"
+      patterns: # Uses "." as a seperator (i.e. Morphotype.Genus_Type.Species.Variety) and "*" to denote "all"
+        - "Elongate.faceted.*.*"
+        - "Polyhedral.faceted.*.*"
+        - "Polyhedral.Sclereid.*.*"
+        - "Spheroid.decorated.*.*"
+        - "Tracheary_annulate.*.*.*"
+    
+    "Ferns, woody or herbaceous dicotyledons":
+      microfossil_type: "Phytolith"
+      patterns:
+        - "Spheroid.psilate.*.*"
+        - "Spheroid.faceted.*.*"
+        - "Blocky.*.*.*"
+        - "Spheroid.ornate.*.*"
+    
+    "Grasses (Poaceae)":
+      microfossil_type: "Phytolith"
+      patterns:
+        - "Bilobate.*.*.*"
+        - "Crenate.*.*.*"
+        - "Cross.*.*.*"
+        - "Rondel.*.*.*"
+        - "Saddle.*.*.*"
+        - "Bulliform_flabellate.*.*.*"
+    
+    # Diatom groups
+    "Araphid diatoms":
+      microfossil_type: "Diatom"
+      patterns: ["Araphid.*.*.*"]
+    
+    "Asymmetric Biraphid diatoms":
+      microfossil_type: "Diatom"
+      patterns: ["Asymmetric_Biraphid.*.*.*"]
+    
+    "Centric diatoms":
+      microfossil_type: "Diatom"
+      patterns: ["Centric.*.*.*"]
+    
+    "Epithemioid diatoms":
+      microfossil_type: "Diatom"
+      patterns: ["Epithemioid.*.*.*"]
+    
+    "Eunotioid diatoms":
+      microfossil_type: "Diatom"
+      patterns: ["Eunotioid.*.*.*"]
+    
+    "Monoraphid diatoms":
+      microfossil_type: "Diatom"
+      patterns: ["Monoraphid.*.*.*"]
+    
+    "Surirelloid diatoms":
+      microfossil_type: "Diatom"
+      patterns: ["Surirelloid.*.*.*"]
+    
+    "Symmetric Biraphid diatoms":
+      microfossil_type: "Diatom"
+      patterns: ["Symmetric_Biraphid.*.*.*"]
+    
+    "Nitzschioid diatoms":
+      microfossil_type: "Diatom"
+      patterns: ["Nitzschioid.*.*.*"]

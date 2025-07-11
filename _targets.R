@@ -41,8 +41,6 @@ list(
   paleo_processing,
   
   fieldorder_processing,
-
-  fieldorder_integration,
   
   stratigraphy,
 
