@@ -44,19 +44,19 @@ functional_groupings:
     "Woody dicotyledons":
       microfossil_type: "Phytolith"
       patterns: # Uses "." as a seperator (i.e. Morphotype.Genus_Type.Species.Variety) and "*" to denote "all"
-        - "Elongate.faceted.*.*"
-        - "Polyhedral.faceted.*.*"
+        - "Elongate.Faceted.*.*"
+        - "Polyhedral.Faceted.*.*"
         - "Polyhedral.Sclereid.*.*"
-        - "Spheroid.decorated.*.*"
+        - "Spheroid.Decorated.*.*"
         - "Tracheary_annulate.*.*.*"
     
     "Ferns, woody or herbaceous dicotyledons":
       microfossil_type: "Phytolith"
       patterns:
-        - "Spheroid.psilate.*.*"
-        - "Spheroid.faceted.*.*"
+        - "Spheroid.Psilate.*.*"
+        - "Spheroid.Faceted.*.*"
         - "Blocky.*.*.*"
-        - "Spheroid.ornate.*.*"
+        - "Spheroid.Ornate.*.*"
     
     "Grasses (Poaceae)":
       microfossil_type: "Phytolith"
