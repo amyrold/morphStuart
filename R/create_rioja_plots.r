@@ -97,8 +97,13 @@ create_rioja_strat_plots <- function(species_matrix, depth_data,
       yvar = depth_ordered,
       title = plot_title,
       ylabel = if(any(grepl("YEAR", names(depth_data)))) "Age (years)" else "Depth (cm)",
-      srt.xlabel = 45,
-      mgp = c(3, 1, 0)
+      srt.xlabel = 22.5,         # Rotate labels (was 45)
+      cex.xlabel = 0.7,          # Make labels smaller
+      cex.title = 0.9,           # Slightly smaller title
+      cex.ylabel = 0.8,          # Smaller y-axis label
+      mgp = c(2.5, 0.7, 0),      # Tighter margins [axis title, axis labels, axis line]
+      xSpace = 0.01,             # Add small space between taxa columns
+      mar = c(8, 4, 4, 8)        # Increase bottom margin for rotated labels [bottom, left, top, right]
     )
     
     dev.off()
