@@ -11,7 +11,8 @@ paths:
 
 analysis:
   conflict_threshold: 0.10
-  rioja_grouping_level: "full_taxonomy"
+  rioja_grouping_level: "functional_groups" # "functional_groups" / "full_taxonomy"
+  exclude_non_diagnostic: true  # Whether to apply exclusions
   community_evenness_index: "pielou"
   time_column: "CSTRAT"
   turnover_method: "bray"

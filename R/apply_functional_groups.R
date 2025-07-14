@@ -1,13 +1,21 @@
-#' Apply Functional Groupings Using Wildcard Patterns
+#' Apply Functional Group Labels and Exclusions
 #'
-#' Groups microfossil taxa into functional ecological groups using wildcard
-#' pattern matching for full taxonomic flexibility.
+#' Adds functional group labels to taxa and applies exclusions for diagnostic
+#' elements, but preserves original taxonomic resolution for flexible downstream use.
 #'
-#' @param paleo_merged_counts_raw Output from merge_microscopy_counts()
-#' @param config Project configuration list (from yaml::read_yaml())
-#' @return Data frame with functional groups replacing individual taxa
-apply_functional_groupings <- function(paleo_merged_counts_raw, config) {
-  if (!is.data.frame(paleo_merged_counts_raw)) {
+#' @param paleo_merged_counts Output from merge_microscopy_counts()
+#' @param config Project configuration list
+#' @return Data frame with functional_group column added, exclusions applied
+#' Apply Functional Group Labels and Exclusions
+#'
+#' Adds functional group labels to taxa and applies exclusions for diagnostic
+#' elements, but preserves original taxonomic resolution for flexible downstream use.
+#'
+#' @param paleo_merged_counts Output from merge_microscopy_counts()
+#' @param config Project configuration list
+#' @return Data frame with functional_group column added, exclusions applied
+apply_functional_labels <- function(paleo_merged_counts, config) {
+  if (!is.data.frame(paleo_merged_counts)) {
     stop("Input must be a data frame")
   }
   if (!is.list(config) || !"functional_groupings" %in% names(config)) {
@@ -15,7 +23,7 @@ apply_functional_groupings <- function(paleo_merged_counts_raw, config) {
   }
   
   required_cols <- c("Sample_ID", "Microfossil_Type", "Morphotype", "Count")
-  missing_cols <- setdiff(required_cols, names(paleo_merged_counts_raw))
+  missing_cols <- setdiff(required_cols, names(paleo_merged_counts))
   if (length(missing_cols) > 0) {
     stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
   }
@@ -24,7 +32,7 @@ apply_functional_groupings <- function(paleo_merged_counts_raw, config) {
   validate_functional_config_patterns(config$functional_groupings)
   
   # Add missing taxonomic columns if needed
-  data_with_taxonomy <- paleo_merged_counts_raw %>%
+  data_with_taxonomy <- paleo_merged_counts %>%
     dplyr::mutate(
       Genus_Type = ifelse(is.na(Genus_Type) | Genus_Type == "", "spp", Genus_Type),
       Species = ifelse(is.na(Species) | Species == "", "sp", Species),
@@ -34,7 +42,7 @@ apply_functional_groupings <- function(paleo_merged_counts_raw, config) {
   # Step 1: Apply exclusions
   data_filtered <- apply_exclusions_patterns(data_with_taxonomy, config$functional_groupings$exclude_taxa)
   
-  # Step 2: Apply functional groupings
+  # Step 2: Apply functional group labels (but don't aggregate)
   functional_groups_assigned <- assign_groups_patterns(
     data_filtered$Microfossil_Type, 
     data_filtered$Morphotype, 
@@ -44,47 +52,30 @@ apply_functional_groupings <- function(paleo_merged_counts_raw, config) {
     config$functional_groupings$groups
   )
 
-  data_with_functional_groups <- data_filtered %>%
-    dplyr::mutate(functional_group = functional_groups_assigned) %>%
-    dplyr::filter(!is.na(functional_group), Count > 0)
-
-  # Save unassigned patterns for review
+  # Add functional group column
+  result <- data_filtered %>%
+    dplyr::mutate(functional_group = functional_groups_assigned)
+  
+  # Save unassigned patterns for review (with proper arguments)
   if (sum(is.na(functional_groups_assigned)) > 0) {
     unassigned_indices <- is.na(functional_groups_assigned)
     save_unassigned_patterns(
-      data_filtered$Microfossil_Type[unassigned_indices],
-      data_filtered$Morphotype[unassigned_indices],
-      data_filtered$Genus_Type[unassigned_indices],
-      data_filtered$Species[unassigned_indices],
-      data_filtered$Variety[unassigned_indices],
-      config$paths$unassigned_functional_group
+      microfossil_type = data_filtered$Microfossil_Type[unassigned_indices],
+      morphotype = data_filtered$Morphotype[unassigned_indices],
+      genus_type = data_filtered$Genus_Type[unassigned_indices],
+      species = data_filtered$Species[unassigned_indices],
+      variety = data_filtered$Variety[unassigned_indices],
+      filename = config$paths$unassigned_functional_group
     )
   }
   
-  # Step 3: Aggregate by functional group
-  functional_aggregated <- data_with_functional_groups %>%
-    dplyr::group_by(
-      Sample_ID, LSPEC, V_number, sample_type, functional_group
-    ) %>%
-    dplyr::summarise(
-      Count = sum(Count, na.rm = TRUE),
-      n_original_taxa = dplyr::n(),
-      .groups = "drop"
-    ) %>%
-    dplyr::rename(Microfossil_Type = functional_group) %>%
-    dplyr::mutate(
-      Morphotype = "functional_group",
-      Genus_Type = NA_character_,
-      Species = NA_character_,
-      Variety = NA_character_
-    )
-  
   # Summary report
-  cat("Functional Grouping Summary:\n")
-  cat("Records processed:", nrow(paleo_merged_counts_raw), "→", nrow(functional_aggregated), "\n")
-  cat("Functional groups created:", length(unique(functional_aggregated$Microfossil_Type)), "\n\n")
+  cat("Functional Labeling Summary:\n")
+  cat("Records processed:", nrow(paleo_merged_counts), "→", nrow(result), "\n")
+  cat("Records with functional group labels:", sum(!is.na(functional_groups_assigned)), "\n")
+  cat("Records without labels (unassigned):", sum(is.na(functional_groups_assigned)), "\n\n")
   
-  return(as.data.frame(functional_aggregated))
+  return(as.data.frame(result))
 }
 
 #' Apply Exclusions Using Pattern Matching
