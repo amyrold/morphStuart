@@ -105,3 +105,8 @@ functional_groupings:
     "Nitzschioid diatoms":
       microfossil_type: "Diatom"
       patterns: ["Nitzschioid.*.*.*"]
+    
+    # Charred Group
+    "Charred Remains":
+      microfossil_type: "Charred"
+      patterns: ["*.*.*.*"]
