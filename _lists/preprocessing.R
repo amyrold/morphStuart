@@ -12,7 +12,7 @@ preprocessing <- list(
   ),
 
   # ========================================================================= #
-  # DATA IMPORT ----
+  # RAW DATA IMPORT ----
   # ========================================================================= #
   
   tar_target(
@@ -42,6 +42,24 @@ preprocessing <- list(
   
   tar_target(morph_with_ids, extract_ids(morph_raw)),
   tar_target(paleo_with_ids, extract_ids(paleo_raw)),  
-  tar_target(order_with_ids, extract_ids(order_raw))
+  tar_target(order_with_ids, extract_ids(order_raw)),
+
+  # ========================================================================= #
+  # ADDITIONAL DATA IMPORT ----
+  # ========================================================================= #
+
+  tar_target(
+    name = updated_scales_file,
+    command = project_config$paths$raw_missing_scales,
+    format = "file",
+    description = "Updated scale measurements from JNC"
+  ),
+
+  tar_target(
+    name = updated_depths_file,
+    command = project_config$paths$raw_missing_depths,
+    format = "file",
+    description = "Updated depth measurements from JNC"
+  )
   
 )

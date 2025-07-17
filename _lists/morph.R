@@ -10,13 +10,6 @@ morph_processing <- list(
   ),
   
   tar_target(
-    name = updated_scales_file,
-    command = project_config$paths$raw_missing_scales,
-    format = "file",
-    description = "Updated scale measurements from colleague"
-  ),
-  
-  tar_target(
     name = morph_with_scales, 
     command = handle_missing_scales(morph_with_ids, flagged_fish_missing_scales, updated_scales_file),
     description = "Morphology data with scale issues resolved (updated or filtered)"
