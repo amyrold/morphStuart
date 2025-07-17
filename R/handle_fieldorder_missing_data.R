@@ -1,60 +1,39 @@
 #' Handle Field Order Missing Data
 #'
-#' Identifies records with missing key data and separates them into
+#' Identifies records with missing CSTRAT data and separates them into
 #' complete records (ready for analysis) and incomplete records (flagged).
+#' CSTRAT is the key variable needed for stratigraphic analysis.
 #'
-#' @param duplicates_result Result from process_fieldorder_duplicates()
-#' @return List with $complete (analysis-ready data) and $incomplete (flagged records)
+#' @param duplicates_clean_data Clean data from process_fieldorder_duplicates()
+#' @return Data frame with complete records ready for analysis
 #'
 #' @examples
-#' result <- handle_fieldorder_missing_data(duplicates_processed)
-#' complete_data <- result$complete
-#' incomplete_data <- result$incomplete
-handle_fieldorder_missing_data <- function(duplicates_result) {
-  if (!is.list(duplicates_result) || !"clean" %in% names(duplicates_result)) {
-    stop("Input must be result from process_fieldorder_duplicates()")
+#' complete_data <- handle_fieldorder_missing_data(duplicates_clean_data)
+handle_fieldorder_missing_data <- function(duplicates_clean_data) {
+  if (!is.data.frame(duplicates_clean_data)) {
+    stop("Input must be a data frame")
   }
   
-  clean_data <- duplicates_result$clean
-  key_columns <- c("CSTRAT", "ISTRAT", "YEAR", "INT")
-  
+  # Only CSTRAT is required for analysis
   # Add missing data indicators
-  data_with_flags <- clean_data %>%
+  data_with_flags <- duplicates_clean_data %>%
     dplyr::mutate(
-      missing_count = rowSums(is.na(dplyr::select(., dplyr::all_of(key_columns)))),
-      missing_columns = purrr::pmap_chr(
-        dplyr::select(., dplyr::all_of(key_columns)),
-        function(...) {
-          values <- list(...)
-          missing_cols <- key_columns[sapply(values, is.na)]
-          if (length(missing_cols) == 0) return("None")
-          paste(missing_cols, collapse = ", ")
-        }
-      ),
-      completeness_score = 1 - (missing_count / length(key_columns))
+      missing_cstrat = is.na(CSTRAT)
     )
   
-  # Separate complete from incomplete records
+  # Separate complete from incomplete records based on CSTRAT only
   complete_records <- data_with_flags %>%
-    dplyr::filter(missing_count == 0) %>%
+    dplyr::filter(!missing_cstrat) %>%
     dplyr::mutate(data_quality = "Complete") %>%
-    dplyr::select(-missing_count, -missing_columns)  # Remove temporary columns
+    dplyr::select(-missing_cstrat)  # Remove temporary column
   
   incomplete_records <- data_with_flags %>%
-    dplyr::filter(missing_count > 0) %>%
+    dplyr::filter(missing_cstrat) %>%
     dplyr::mutate(
-      data_quality = dplyr::case_when(
-        missing_count >= 3 ~ "Poor - most data missing",
-        missing_count == 2 ~ "Fair - half data missing",
-        missing_count == 1 ~ "Good - minimal missing data"
-      ),
-      flag_reason = paste("Missing data in:", missing_columns),
-      flag_category = "Missing data",
-      action_needed = dplyr::case_when(
-        missing_count >= 3 ~ "Consider excluding from analysis",
-        missing_count >= 2 ~ "Use with caution",
-        TRUE ~ "Monitor for analysis limitations"
-      )
+      data_quality = "Incomplete - missing CSTRAT",
+      flag_reason = "Missing CSTRAT (required for analysis)",
+      flag_category = "Missing required data",
+      action_needed = "Exclude from analysis or find CSTRAT data"
     )
   
   # Save incomplete records if any exist
@@ -65,14 +44,12 @@ handle_fieldorder_missing_data <- function(duplicates_result) {
     write.csv(incomplete_records, "data/flagged/fieldorder_missing_data.csv", row.names = FALSE)
   }
   
-  return(list(
-    complete = as.data.frame(complete_records),
-    incomplete = as.data.frame(incomplete_records),
-    summary = list(
-      input_records = nrow(clean_data),
-      complete_records = nrow(complete_records),
-      incomplete_records = nrow(incomplete_records),
-      completion_rate = round(100 * nrow(complete_records) / nrow(clean_data), 1)
-    )
-  ))
+  # Report processing results
+  cat("Field Order Missing Data Processing:\n")
+  cat("Input records:", nrow(duplicates_clean_data), "\n")
+  cat("Complete records (with CSTRAT):", nrow(complete_records), "\n")
+  cat("Incomplete records (missing CSTRAT):", nrow(incomplete_records), "\n")
+  cat("Completion rate:", round(100 * nrow(complete_records) / nrow(duplicates_clean_data), 1), "%\n\n")
+  
+  return(as.data.frame(complete_records))
 }

@@ -23,13 +23,13 @@ paleo_processing <- list(
 
   tar_target(
     name = lspec_integration_check,
-    command = validate_lspec_links(paleo_with_functional_labels, fieldorder_final$complete),
+    command = validate_lspec_links(paleo_with_functional_labels, fieldorder_final),
     description = "Validate which paleo LSPECs can be linked with field order stratigraphic data"
   ),
   
   tar_target(
     name = paleo_with_depths,
-    command = merge_paleo_with_fieldorder(paleo_with_functional_labels, fieldorder_final$complete),
+    command = merge_paleo_with_fieldorder(paleo_with_functional_labels, fieldorder_final),
     description = "Merge stickleback paleo data with field order age/depth information via LSPEC"
   )
 )

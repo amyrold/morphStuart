@@ -4,12 +4,10 @@
 #' and merges non-conflicting duplicates into single records.
 #'
 #' @param formatted_data Formatted field order data frame
-#' @return List with $clean (processed data) and $flagged (conflicting records)
+#' @return Data frame with clean data after duplicate processing
 #'
 #' @examples
-#' result <- process_fieldorder_duplicates(formatted_data)
-#' clean_data <- result$clean
-#' flagged_data <- result$flagged
+#' clean_data <- process_fieldorder_duplicates(formatted_data)
 process_fieldorder_duplicates <- function(formatted_data) {
   if (!is.data.frame(formatted_data)) {
     stop("Input must be a data frame")
@@ -91,14 +89,12 @@ process_fieldorder_duplicates <- function(formatted_data) {
     write.csv(flagged_records, "data/flagged/fieldorder_duplicate_conflicts.csv", row.names = FALSE)
   }
   
-  return(list(
-    clean = as.data.frame(clean_data),
-    flagged = as.data.frame(flagged_records),
-    summary = list(
-      total_input = nrow(formatted_data),
-      clean_output = nrow(clean_data),
-      flagged_output = nrow(flagged_records),
-      conflicting_lspecs = length(conflicting_lspecs)
-    )
-  ))
+  # Report processing results
+  cat("Field Order Duplicate Processing:\n")
+  cat("Input records:", nrow(formatted_data), "\n")
+  cat("Clean records after processing:", nrow(clean_data), "\n")
+  cat("Flagged records:", nrow(flagged_records), "\n")
+  cat("Conflicting LSPECs:", length(conflicting_lspecs), "\n\n")
+  
+  return(as.data.frame(clean_data))
 }

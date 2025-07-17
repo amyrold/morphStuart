@@ -27,14 +27,18 @@ library(visNetwork)
 # Load pipeline results with error handling
 tryCatch({
   tar_load(c(
+    # Morph
     "morph_raw", "paleo_raw", 
     "morph_with_ids", "paleo_with_ids",
     "morph_with_scales", "morph_corrected", "morph_non_overlap", "morph_final",
+    # Paleo
     "paleo_merged_counts",
     "flagged_fish_missing_scales",
     "report_completeness_data", "plot_completeness", "plot_microfossil_types",
     "paleo_stickleback_only", "lspec_integration_check", "integrated_paleo_metadata",
     "paleo_summary_table", "rioja_species_matrix", "rioja_depth_data", "rioja_strat_plots",
+    # Fieldorder
+    "fieldorder_updated",
     # Community ecology targets
     "aggregated_taxa", "filtered_taxa", "community_metrics", "turnover_matrix", 
     "trends_plot", "turnover_heatmap"
@@ -60,8 +64,8 @@ if (requireNamespace("visNetwork", quietly = TRUE)) {
     "morph_with_ids", "paleo_with_ids",
     "morph_with_scales", "morph_corrected", "morph_non_overlap", "morph_final",
     "paleo_merged_counts", "order_raw", "order_with_ids", "fieldorder_formatted",
-    "fieldorder_duplicates_processed", "fieldorder_final", 
-    "fieldorder_processing_summary",
+    "fieldorder_duplicates_clean", "fieldorder_final", 
+    "fieldorder_processing_summary", "fieldorder_updated",
     "paleo_stickleback_only", "lspec_integration_check", "integrated_paleo_metadata",
     "paleo_summary_table", "rioja_species_matrix", "rioja_depth_data", "rioja_strat_plots"
     
@@ -401,7 +405,7 @@ The field order pipeline processes stratigraphic and age data that links fish sp
 if (requireNamespace("visNetwork", quietly = TRUE)) {
   fieldorder_targets <- c(
     "order_raw", "order_with_ids", "fieldorder_formatted", 
-    "fieldorder_duplicates_processed", "fieldorder_final"
+    "fieldorder_duplicates_clean", "fieldorder_final", "fieldorder_updated"
   )
   
   all_targets <- tar_meta()$name
@@ -423,8 +427,8 @@ if (requireNamespace("visNetwork", quietly = TRUE)) {
 tryCatch({
   tar_load(c(
     "order_raw", "order_with_ids", "fieldorder_formatted",
-    "fieldorder_duplicates_processed", "fieldorder_final", 
-    "fieldorder_processing_summary"
+    "fieldorder_duplicates_clean", "fieldorder_final", 
+    "fieldorder_processing_summary", "fieldorder_updated"
   ))
 }, error = function(e) {
   cat("Note: Some field order targets could not be loaded.\n")
@@ -475,32 +479,31 @@ if(exists("order_raw") && exists("fieldorder_formatted")) {
 Multiple records can have the same LSPEC identifier. The pipeline identifies which duplicates have conflicting data versus those that can be safely merged.
 
 ```{r duplicate-processing}
-if(exists("fieldorder_duplicates_processed")) {
-  dup_result <- fieldorder_duplicates_processed
+if(exists("fieldorder_duplicates_clean") && exists("fieldorder_processing_summary")) {
+  summary_data <- fieldorder_processing_summary
   
   cat("Duplicate LSPEC Analysis:\n")
-  cat("Input records:", dup_result$summary$total_input, "\n")
-  cat("Clean records after processing:", dup_result$summary$clean_output, "\n")
-  cat("Conflicting records flagged:", dup_result$summary$flagged_output, "\n")
-  cat("LSPECs with conflicts:", dup_result$summary$conflicting_lspecs, "\n\n")
+  cat("Input records:", summary_data$record_counts$input_records, "\n")
+  cat("Clean records after processing:", summary_data$record_counts$after_duplicate_processing, "\n")
+  cat("Conflicting records flagged:", summary_data$data_quality$duplicate_conflicts, "\n\n")
   
   # Calculate duplicate statistics
-  input_lspecs <- length(unique(fieldorder_formatted$LSPEC))
-  clean_lspecs <- length(unique(dup_result$clean$LSPEC))
+  input_lspecs <- summary_data$record_counts$unique_input_lspecs
+  clean_lspecs <- length(unique(fieldorder_duplicates_clean$LSPEC))
   
   cat("LSPEC Summary:\n")
   cat("Unique LSPECs (input):", input_lspecs, "\n")
   cat("Unique LSPECs (clean):", clean_lspecs, "\n")
   cat("LSPECs removed due to conflicts:", input_lspecs - clean_lspecs, "\n")
-  cat("Conflict rate:", round(100 * dup_result$summary$conflicting_lspecs / input_lspecs, 1), "%\n\n")
+  cat("Conflict rate:", round(100 * summary_data$data_quality$duplicate_conflicts / summary_data$record_counts$input_records, 1), "%\n\n")
   
   # Show merging efficiency for clean duplicates
-  if("n_records_merged" %in% names(dup_result$clean)) {
-    merged_records <- sum(dup_result$clean$n_records_merged > 1)
+  if("n_records_merged" %in% names(fieldorder_duplicates_clean)) {
+    merged_records <- sum(fieldorder_duplicates_clean$n_records_merged > 1)
     cat("LSPECs with multiple records merged:", merged_records, "\n")
     
     if(merged_records > 0) {
-      merge_summary <- dup_result$clean %>%
+      merge_summary <- fieldorder_duplicates_clean %>%
         filter(n_records_merged > 1) %>%
         pull(n_records_merged) %>%
         summary()
@@ -516,44 +519,63 @@ if(exists("fieldorder_duplicates_processed")) {
 }
 ```
 
-## Step 3: Missing Data Handling
+## Step 3: Additional Data Updates
 
-Records are classified as complete or incomplete based on the availability of key stratigraphic and age data (CSTRAT, ISTRAT, YEAR, INT).
+Additional field order data can be incorporated if available to update existing LSPEC records with new depth information.
+
+```{r additional-data-updates}
+if(exists("fieldorder_updated") && exists("fieldorder_processing_summary")) {
+  summary_data <- fieldorder_processing_summary
+  
+  cat("Additional Data Updates:\n")
+  cat(summary_data$processing_steps$step3_updates, "\n")
+  
+  # Show basic statistics about the update process
+  input_records <- nrow(fieldorder_duplicates_clean)
+  output_records <- nrow(fieldorder_updated)
+  
+  cat("Records before updates:", input_records, "\n")
+  cat("Records after updates:", output_records, "\n")
+  
+  if(input_records == output_records) {
+    cat("Data structure maintained through update process.\n")
+  }
+  cat("\n")
+} else {
+  cat("Additional data update information not available.\n")
+}
+```
+
+## Step 4: Missing Data Handling
+
+Records are classified as complete or incomplete based on the availability of CSTRAT (stratigraphic depth). CSTRAT is the key variable needed for analysis, while other columns provide additional context.
 
 ```{r missing-data-handling}
-if(exists("fieldorder_final")) {
-  final_result <- fieldorder_final
+if(exists("fieldorder_final") && exists("fieldorder_processing_summary")) {
+  summary_data <- fieldorder_processing_summary
   
   cat("Missing Data Analysis:\n")
-  cat("Input records (after duplicate processing):", final_result$summary$input_records, "\n")
-  cat("Complete records (all key data present):", final_result$summary$complete_records, "\n")
-  cat("Incomplete records (missing key data):", final_result$summary$incomplete_records, "\n")
-  cat("Data completion rate:", final_result$summary$completion_rate, "%\n\n")
+  cat("Input records (after updates):", summary_data$record_counts$after_duplicate_processing, "\n")
+  cat("Complete records (with CSTRAT):", summary_data$record_counts$final_complete_records, "\n")
+  cat("Incomplete records (missing CSTRAT):", summary_data$data_quality$missing_data_records, "\n")
+  cat("Data completion rate:", summary_data$record_counts$data_retention_rate, "%\n\n")
+  
+  # Show data completeness by column
+  if(summary_data$record_counts$final_complete_records > 0) {
+    cat("Data completeness by column:\n")
+    cat("CSTRAT:", summary_data$data_quality$completeness_percentages$cstrat, "%\n")
+    cat("ISTRAT:", summary_data$data_quality$completeness_percentages$istrat, "%\n")
+    cat("YEAR:", summary_data$data_quality$completeness_percentages$year, "%\n")
+    cat("INT:", summary_data$data_quality$completeness_percentages$int, "%\n\n")
+  }
   
   # Show breakdown of incomplete records if any exist
-  if(nrow(final_result$incomplete) > 0) {
-    cat("Incomplete Records Breakdown:\n")
-    
-    # Count by data quality category
-    if("data_quality" %in% names(final_result$incomplete)) {
-      quality_breakdown <- table(final_result$incomplete$data_quality)
-      print(quality_breakdown)
-      cat("\n")
-    }
-    
-    # Show missing data patterns
-    if("missing_columns" %in% names(final_result$incomplete)) {
-      missing_patterns <- final_result$incomplete %>%
-        count(missing_columns, name = "count") %>%
-        arrange(desc(count))
-      
-      cat("Missing Data Patterns:\n")
-      kable(head(missing_patterns, 5), caption = "Most Common Missing Data Patterns")
-    }
-    
-    cat("\nIncomplete records saved to 'data/flagged/fieldorder_missing_data.csv'\n")
+  if(summary_data$data_quality$missing_data_records > 0) {
+    cat("Incomplete Records:\n")
+    cat("Records flagged for missing CSTRAT:", summary_data$data_quality$missing_data_records, "\n")
+    cat("Incomplete records saved to 'data/flagged/fieldorder_missing_data.csv'\n")
   } else {
-    cat("All records have complete key data!\n")
+    cat("All records have CSTRAT data!\n")
   }
 } else {
   cat("Missing data handling results not available.\n")
@@ -563,20 +585,18 @@ if(exists("fieldorder_final")) {
 ## Stratigraphic and Age Distributions
 
 ```{r fieldorder-distributions, fig.height=8}
-if(exists("fieldorder_final") && nrow(fieldorder_final$complete) > 0) {
+if(exists("fieldorder_final") && nrow(fieldorder_final) > 0) {
   
   # Create distribution plots
-  p1 <- stratigraphic_distribution_plot(fieldorder_final$complete)
-  p2 <- age_distribution_plot(fieldorder_final$complete)
-  #p3 <- age_depth_relationship_plot(fieldorder_final$complete)
+  p1 <- stratigraphic_distribution_plot(fieldorder_final)
+  p2 <- age_distribution_plot(fieldorder_final)
   
   # Arrange plots
   if(requireNamespace("gridExtra", quietly = TRUE)) {
-    gridExtra::grid.arrange(p1, p2,ncol = 2) # p3,
+    gridExtra::grid.arrange(p1, p2, ncol = 2)
   } else {
     print(p1)
     print(p2)
-    #print(p3)
   }
 } else {
   cat("Field order distribution plots not available.\n")
@@ -610,7 +630,8 @@ if(exists("fieldorder_processing_summary")) {
   cat("\nProcessing Steps Completed:\n")
   cat("1.", summary_data$processing_steps$step1_formatting, "\n")
   cat("2.", summary_data$processing_steps$step2_duplicates, "\n") 
-  cat("3.", summary_data$processing_steps$step3_missing_data, "\n")
+  cat("3.", summary_data$processing_steps$step3_updates, "\n")
+  cat("4.", summary_data$processing_steps$step4_missing_data, "\n")
 } else {
   cat("Field order processing summary not available.\n")
 }

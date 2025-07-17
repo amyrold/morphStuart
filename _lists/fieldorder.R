@@ -3,16 +3,9 @@ fieldorder_processing <- list(
   # FIELD ORDER PROCESSING PIPELINE ----
   # ========================================================================= #
   
-  # REVIEWED: No longer needed
-  # tar_target(
-  #   name = decimal_lspecs_review,
-  #   command = validate_decimal_lspecs(order_raw),
-  #   description = "Identify all field order records with decimal LSPEC values for colleague review"
-  # ),
-  
   tar_target(
     name = missing_morph_lspecs_review,
-    command = validate_missing_morph_lspecs(morph_with_ids, fieldorder_final$complete),
+    command = validate_missing_morph_lspecs(morph_with_ids, fieldorder_final),
     description = "Identify morph LSPECs missing from field order data"
   ),
 
@@ -23,22 +16,29 @@ fieldorder_processing <- list(
   ),
   
   tar_target(
-    name = fieldorder_duplicates_processed,
+    name = fieldorder_duplicates_clean,
     command = process_fieldorder_duplicates(fieldorder_formatted),
     description = "Remove conflicting duplicates, merge clean duplicates"
+  ),
+
+  tar_target(
+    name = fieldorder_updated,
+    command = update_fieldorder_data(fieldorder_duplicates_clean, updated_depths_file),
+    description = "Add additional data if present"
   ),
   
   tar_target(
     name = fieldorder_final,
-    command = handle_fieldorder_missing_data(fieldorder_duplicates_processed),
-    description = "Separate complete records from those with missing data"
+    command = handle_fieldorder_missing_data(fieldorder_updated),
+    description = "Complete records ready for analysis"
   ),
   
   tar_target(
     name = fieldorder_processing_summary,
     command = summarize_fieldorder_processing(
       fieldorder_formatted, 
-      fieldorder_duplicates_processed, 
+      fieldorder_duplicates_clean,
+      fieldorder_updated, 
       fieldorder_final,
       "PitLMorph_fieldorder.csv"
     ),

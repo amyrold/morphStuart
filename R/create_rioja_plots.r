@@ -1,23 +1,20 @@
 #' Create Rioja Stratigraphic Plots
 #'
 #' Generates stratigraphic plots using rioja package for microfossil abundance
-#' data across geological time/depth.
+#' data across geological time/depth. Always saves plot to file.
 #'
 #' @param species_matrix Matrix with samples as rows, taxa as columns (from prepare_rioja_species_data)
 #' @param depth_data Named vector with sample names and corresponding ages/depths
 #' @param plot_title Optional title for the plot
-#' @param save_plot Logical, whether to save plot to file
-#' @param output_dir Directory to save plot (if save_plot = TRUE)
+#' @param output_dir Directory to save plot
 #' @param export_format Format for saved plot: "svg" or "png" (default "svg")
 #' @return List containing the plot object and summary statistics
 #'
 #' @examples
 #' plots <- create_rioja_strat_plots(species_matrix, depth_data)
-#' plots <- create_rioja_strat_plots(species_matrix, depth_data, save_plot = TRUE)
 #' plots <- create_rioja_strat_plots(species_matrix, depth_data, export_format = "png")
 create_rioja_strat_plots <- function(species_matrix, depth_data, 
                                      plot_title = "Microfossil Stratigraphic Distribution",
-                                     save_plot = TRUE,
                                      output_dir = "results/plots",
                                      export_format = "svg") {
   
@@ -55,16 +52,6 @@ create_rioja_strat_plots <- function(species_matrix, depth_data,
   taxa_totals <- colSums(species_ordered)
   species_final <- species_ordered[, taxa_totals > 0, drop = FALSE]
   
-  # Create rioja plot
-  strat_plot <- rioja::strat.plot(
-    d = species_final,
-    yvar = depth_ordered,
-    title = plot_title,
-    ylabel = if(any(grepl("YEAR", names(depth_data)))) "Age (years)" else "Depth (cm)",
-    srt.xlabel = 45,
-    mgp = c(3, 1, 0)
-  )
-  
   # Generate summary statistics
   plot_summary <- list(
     n_samples = nrow(species_final),
@@ -74,41 +61,39 @@ create_rioja_strat_plots <- function(species_matrix, depth_data,
     total_abundance = sum(species_final)
   )
   
-  # Save plot if requested
-  if (save_plot) {
-    if (!dir.exists(output_dir)) {
-      dir.create(output_dir, recursive = TRUE)
-    }
-    
-    # Set filename based on format
-    file_extension <- if(export_format == "svg") ".svg" else ".png"
-    plot_filename <- file.path(output_dir, paste0("rioja_stratigraphic_plot", file_extension))
-    
-    # Open appropriate graphics device
-    if (export_format == "svg") {
-      svg(plot_filename, width = 12, height = 8)
-    } else {
-      png(plot_filename, width = 12, height = 8, units = "in", res = 300)
-    }
-    
-    # Create the plot
-    rioja::strat.plot(
-      d = species_final,
-      yvar = depth_ordered,
-      title = plot_title,
-      ylabel = if(any(grepl("YEAR", names(depth_data)))) "Age (years)" else "Depth (cm)",
-      srt.xlabel = 22.5,         # Rotate labels (was 45)
-      cex.xlabel = 0.7,          # Make labels smaller
-      cex.title = 0.9,           # Slightly smaller title
-      cex.ylabel = 0.8,          # Smaller y-axis label
-      mgp = c(2.5, 0.7, 0),      # Tighter margins [axis title, axis labels, axis line]
-      xSpace = 0.01,             # Add small space between taxa columns
-      mar = c(8, 4, 4, 8)        # Increase bottom margin for rotated labels [bottom, left, top, right]
-    )
-    
-    dev.off()
-    cat("Plot saved to:", plot_filename, "\n")
+  # Create output directory if it doesn't exist
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
   }
+  
+  # Set filename based on format
+  file_extension <- if(export_format == "svg") ".svg" else ".png"
+  plot_filename <- file.path(output_dir, paste0("rioja_stratigraphic_plot", file_extension))
+  
+  # Open appropriate graphics device
+  if (export_format == "svg") {
+    svg(plot_filename, width = 12, height = 8)
+  } else {
+    png(plot_filename, width = 12, height = 8, units = "in", res = 300)
+  }
+  
+  # Create the plot
+  strat_plot <- rioja::strat.plot(
+    d = species_final,
+    yvar = depth_ordered,
+    title = plot_title,
+    ylabel = if(any(grepl("YEAR", names(depth_data)))) "Age (years)" else "Depth (cm)",
+    srt.xlabel = 22.5,         # Rotate labels (was 45)
+    cex.xlabel = 0.7,          # Make labels smaller
+    cex.title = 0.9,           # Slightly smaller title
+    cex.ylabel = 0.8,          # Smaller y-axis label
+    mgp = c(2.5, 0.7, 0),      # Tighter margins [axis title, axis labels, axis line]
+    xSpace = 0.01,             # Add small space between taxa columns
+    mar = c(8, 4, 4, 8)        # Increase bottom margin for rotated labels [bottom, left, top, right]
+  )
+  
+  dev.off()
+  cat("Plot saved to:", plot_filename, "\n")
   
   # Report results
   cat("Rioja Stratigraphic Plot Created:\n")
