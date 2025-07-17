@@ -1,12 +1,13 @@
 #' Update Field Order Data with Additional Information
 #'
 #' Incorporates additional field order data if present, updating existing LSPEC records
-#' with new CSTRAT (depth) information. If the additional data file is not present,
-#' returns the original data unchanged.
+#' with new CSTRAT (depth) information and adding new LSPEC records that don't exist
+#' in the original data. If the additional data file is not present, returns the 
+#' original data unchanged.
 #'
 #' @param fieldorder_clean_data Clean field order data from duplicate processing
 #' @param additional_data_file Path to additional data file (optional)
-#' @return Data frame with updated field order information
+#' @return Data frame with updated field order information including any new LSPECs
 #'
 #' @examples
 #' updated_data <- update_fieldorder_data(fieldorder_clean_data, "data/raw/170725_missing_depths.csv")
@@ -45,27 +46,55 @@ update_fieldorder_data <- function(fieldorder_clean_data, additional_data_file =
       return(fieldorder_clean_data)
     }
     
-    # Update existing data with new CSTRAT values
+    # Identify existing vs new LSPECs
+    existing_lspecs <- fieldorder_clean_data$LSPEC
+    new_lspecs <- processed_updates %>%
+      dplyr::filter(!LSPEC %in% existing_lspecs)
+    
+    # Update existing data
     updated_data <- fieldorder_clean_data %>%
-      dplyr::left_join(processed_updates, by = "LSPEC") %>%
+      dplyr::left_join(processed_updates %>% dplyr::select(LSPEC, CSTRAT_new), by = "LSPEC") %>%
       dplyr::mutate(
         CSTRAT = coalesce(CSTRAT_new, CSTRAT)
       ) %>%
       dplyr::select(-CSTRAT_new)
     
-    # Report update results
-    updates_applied <- sum(!is.na(processed_updates$CSTRAT_new))
-    lspecs_updated <- processed_updates$LSPEC
+    # Add new LSPECs if any exist
+    if (nrow(new_lspecs) > 0) {
+      # Get column structure from existing data
+      template_cols <- names(fieldorder_clean_data)
+      
+      new_rows <- new_lspecs %>%
+        dplyr::rename(CSTRAT = CSTRAT_new) %>%
+        dplyr::mutate(
+          # Set all other columns to appropriate defaults/NA
+          L_SPEC_original = NA_character_,
+          ISTRAT = NA_real_,
+          YEAR = NA_real_,
+          INT = NA_real_,
+          n_records_merged = 1
+        ) %>%
+        # Select only columns that exist in the original data
+        dplyr::select(dplyr::all_of(intersect(names(.), template_cols)))
+      
+      # Ensure all columns match and are in the right order
+      for (col in template_cols) {
+        if (!col %in% names(new_rows)) {
+          new_rows[[col]] <- NA
+        }
+      }
+      new_rows <- new_rows[, template_cols]
+      
+      # Combine updated data with new rows
+      updated_data <- dplyr::bind_rows(updated_data, new_rows)
+    }
     
+    # Simple reporting
     cat("Additional Field Order Data Processing:\n")
     cat("Additional data file:", additional_data_file, "\n")
-    cat("Updates available:", nrow(processed_updates), "\n")
-    cat("Updates applied:", updates_applied, "\n")
-    cat("LSPECs updated:", paste(head(lspecs_updated, 10), collapse = ", "))
-    if (length(lspecs_updated) > 10) {
-      cat(" (and", length(lspecs_updated) - 10, "more)")
-    }
-    cat("\n\n")
+    cat("Records processed:", nrow(processed_updates), "\n")
+    cat("Records before:", nrow(fieldorder_clean_data), "\n")
+    cat("Records after:", nrow(updated_data), "\n\n")
     
     return(as.data.frame(updated_data))
     

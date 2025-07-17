@@ -31,5 +31,17 @@ morph_processing <- list(
     name = morph_final,
     command = merge_counter_parts(morph_non_overlap),
     description = "Merge non-conflicting part/counterpart data into single records"
+  ),
+
+  tar_target(
+    name = morph_with_depths,
+    command = merge_morph_with_fieldorder(morph_final, fieldorder_final),
+    description = "Merge morphology data with field order age/depth information via LSPEC"
+  ),
+
+  tar_target(
+    name = morph_integration_summary,
+    command = summarize_morph_integration(morph_final, morph_with_depths),
+    description = "Integration summary with statistics and quality metrics for morphology-fieldorder merge"
   )
 )

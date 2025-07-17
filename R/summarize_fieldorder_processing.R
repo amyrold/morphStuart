@@ -84,7 +84,7 @@ summarize_fieldorder_processing <- function(formatted_data, duplicates_clean_dat
       step1_formatting = "Standardized LSPEC IDs and column types",
       step2_duplicates = paste("Removed", flagged_duplicates, "conflicting duplicates,",
                                "merged", merged_duplicates, "clean duplicates"),
-      step3_updates = "Processed additional depth data if available",
+      step3_updates = "Processed additional data file for updates and new records",
       step4_missing_data = paste("Separated", nrow(final_complete_data), "complete records from",
                                  flagged_missing, "incomplete records")
     )

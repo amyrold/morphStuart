@@ -521,7 +521,7 @@ if(exists("fieldorder_duplicates_clean") && exists("fieldorder_processing_summar
 
 ## Step 3: Additional Data Updates
 
-Additional field order data can be incorporated if available to update existing LSPEC records with new depth information.
+Additional field order data can be incorporated if available to update existing LSPEC records and add new LSPEC records.
 
 ```{r additional-data-updates}
 if(exists("fieldorder_updated") && exists("fieldorder_processing_summary")) {
@@ -537,8 +537,8 @@ if(exists("fieldorder_updated") && exists("fieldorder_processing_summary")) {
   cat("Records before updates:", input_records, "\n")
   cat("Records after updates:", output_records, "\n")
   
-  if(input_records == output_records) {
-    cat("Data structure maintained through update process.\n")
+  if(output_records > input_records) {
+    cat("New records added:", output_records - input_records, "\n")
   }
   cat("\n")
 } else {
