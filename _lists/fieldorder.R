@@ -3,11 +3,12 @@ fieldorder_processing <- list(
   # FIELD ORDER PROCESSING PIPELINE ----
   # ========================================================================= #
   
-  tar_target(
-    name = decimal_lspecs_review,
-    command = validate_decimal_lspecs(order_raw),
-    description = "Identify all field order records with decimal LSPEC values for colleague review"
-  ),
+  # REVIEWED: No longer needed
+  # tar_target(
+  #   name = decimal_lspecs_review,
+  #   command = validate_decimal_lspecs(order_raw),
+  #   description = "Identify all field order records with decimal LSPEC values for colleague review"
+  # ),
   
   tar_target(
     name = missing_morph_lspecs_review,

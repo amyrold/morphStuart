@@ -29,7 +29,7 @@ stratigraphy <- list(
   
   tar_target(
     name = rioja_strat_plots,
-    command = create_rioja_strat_plots(rioja_filtered_species_matrix, rioja_depth_data),
+    command = create_rioja_strat_plots(rioja_species_matrix, rioja_depth_data),
     description = "Rioja stratigraphic plots showing microfossil distributions through time"
   )
 )
