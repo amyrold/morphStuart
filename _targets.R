@@ -21,7 +21,7 @@ library(tarchetypes)
 
 tar_option_set(
   packages = c("dplyr", "tidyr", "stringr", "tibble", "purrr", "ggplot2", "scales",
-               "vegan", "rioja", "readr", "knitr", "DT", "yaml", "visNetwork"),
+               "vegan", "rioja", "readr", "knitr", "DT", "yaml", "visNetwork", "mice"),
   format = "rds",
   error = "continue"
 )
