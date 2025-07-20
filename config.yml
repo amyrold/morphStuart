@@ -21,6 +21,53 @@ analysis:
   community_trends_plot_type: "faceted"
   rioja_rare_taxa_threshold: 0.05
 
+# Multiple imputation parameters
+imputation:
+  # MICE parameters for morphological traits
+  mice_method: "pmm"  # Predictive mean matching
+  mice_iterations: 5
+  mice_datasets: 5
+  mice_seed: 333
+  mice_print_flag: FALSE
+  
+  # Morphological trait columns to impute with MICE
+  morph_trait_columns:
+    - "SL"      # Standard length
+    - "CAV"     # Caudal vertebrae
+    - "DS1"     # Dorsal spine 1
+    - "DS2"     # Dorsal spine 2  
+    - "DS3"     # Dorsal spine 3
+    - "MDF"     # Median fin
+    - "MAF"     # Median anal fin
+    - "MCV"     # Median caudal vertebrae
+    - "MAV"     # Median anal vertebrae
+    - "MPT"     # Median pectoral
+    - "LPT"     # Lateral pectoral
+    - "MPSP"    # Median posterior spine
+    - "PSP.L"   # Posterior spine left
+    - "PSP.R"   # Posterior spine right
+    - "TPG"     # Total pectoral girdle
+    - "ECT"     # Ectopterygoid
+    - "CLE"     # Cleithrum
+    - "PMX"     # Premaxilla
+  
+  # Linear model variables (deterministic relationships with CSTRAT)
+  linear_model_vars:
+    ISTRAT:
+      formula: "ISTRAT ~ CSTRAT"
+      relationship: "negative"  # -1 correlation
+    AGE:
+      formula: "AGE ~ CSTRAT" 
+      relationship: "negative"  # -1 correlation
+    INT:
+      formula: "INT ~ CSTRAT"
+      relationship: "custom"    # Custom relationship
+  
+  # Output settings
+  save_mids_object: TRUE
+  imputed_data_path: "data/processed/morph_single_impute.rds"
+  mids_object_path: "data/processed/morph_multi_impute.rds"
+
 plots:
   completeness_width: 10
   completeness_height: 6

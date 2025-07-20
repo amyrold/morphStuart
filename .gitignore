@@ -61,3 +61,5 @@ results/
 # Targets
 _targets/*
 
+# Claude README
+CLAUDE.md

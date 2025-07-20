@@ -43,5 +43,11 @@ morph_processing <- list(
     name = morph_integration_summary,
     command = summarize_morph_integration(morph_final, morph_with_depths),
     description = "Integration summary with statistics and quality metrics for morphology-fieldorder merge"
+  ),
+
+  tar_target(
+    name = morph_imputed,
+    command = impute_morphology(morph_with_depths, project_config),
+    description = "Multiple imputation of morphological traits using MICE and linear models for stratigraphic variables"
   )
 )
